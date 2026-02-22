@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 
+	"github.com/dfbb/im2code/internal/channel/telegram"
 	"github.com/dfbb/im2code/internal/config"
 	"github.com/spf13/cobra"
 )
@@ -71,7 +72,10 @@ func runCheck(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// Stubs — will be replaced when adapters are implemented in Tasks 10-14.
-func checkTelegramToken(_ string) (string, error) { return "token set", nil }
-func checkDiscordToken(_ string) (string, error)  { return "token set", nil }
-func checkSlackToken(_ string) (string, error)    { return "token set", nil }
+func checkTelegramToken(token string) (string, error) {
+	return telegram.CheckToken(token)
+}
+
+// Stubs — will be replaced when adapters are implemented in Tasks 11-14.
+func checkDiscordToken(_ string) (string, error) { return "token set", nil }
+func checkSlackToken(_ string) (string, error)   { return "token set", nil }
