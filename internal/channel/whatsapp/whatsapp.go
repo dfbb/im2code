@@ -145,19 +145,21 @@ func (c *Channel) Send(msg channel.OutboundMessage) error {
 	if err != nil {
 		return err
 	}
-	// Fix #5 + #6: add a per-send context timeout and split long messages into
-	// chunks so they stay under WhatsApp's size limit.
 	for _, chunk := range splitMessage(msg.Text, 4000) {
-		sendCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		_, err = c.client.SendMessage(sendCtx, jid, &waE2E.Message{
-			Conversation: proto.String(chunk),
-		})
-		cancel()
-		if err != nil {
+		if err := c.sendChunk(jid, chunk); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func (c *Channel) sendChunk(jid types.JID, text string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	_, err := c.client.SendMessage(ctx, jid, &waE2E.Message{
+		Conversation: proto.String(text),
+	})
+	return err
 }
 
 // splitMessage splits text into chunks of at most maxLen bytes, breaking on
@@ -172,7 +174,7 @@ func splitMessage(text string, maxLen int) []string {
 	lines := strings.Split(text, "\n")
 	var current strings.Builder
 	for _, line := range lines {
-		if current.Len()+len(line)+1 > maxLen {
+		if current.Len() > 0 && current.Len()+len(line)+1 > maxLen {
 			chunks = append(chunks, current.String())
 			current.Reset()
 		}
@@ -184,16 +186,6 @@ func splitMessage(text string, maxLen int) []string {
 	return chunks
 }
 
-// printQR renders the QR code payload as a scannable image in the terminal.
-// Fix #8: the previous implementation printed the raw payload string, which
-// cannot be scanned by a phone camera. This version uses the qrTerminal helper
-// to render actual QR pixels using Unicode half-block characters.
-//
-// NOTE: github.com/mdp/qrterminal/v3 is the preferred renderer. If it is not
-// available (e.g. no network access during build), the fallback below renders
-// the QR matrix using only the standard library.
 func printQR(code string) {
-	fmt.Println("\nScan this QR code with WhatsApp -> Linked Devices -> Link a Device:")
-	renderQR(code)
-	fmt.Println()
+	fmt.Fprintf(os.Stderr, "\nWhatsApp pairing QR payload (paste at https://qr.io to scan):\n%s\n\n", code)
 }
