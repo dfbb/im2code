@@ -33,6 +33,7 @@ type Channel struct {
 	allowFrom map[string]bool
 	inbound   chan<- channel.InboundMessage
 	mu        sync.Mutex
+	seqMu     sync.Mutex
 	ws        *websocket.Conn
 	seq       int
 	botID     string
@@ -63,6 +64,9 @@ func (c *Channel) Start(ctx context.Context) error {
 }
 
 func (c *Channel) connect(ctx context.Context) error {
+	connCtx, connCancel := context.WithCancel(ctx)
+	defer connCancel()
+
 	conn, _, err := websocket.DefaultDialer.DialContext(ctx, gatewayURL, nil)
 	if err != nil {
 		return err
@@ -87,7 +91,9 @@ func (c *Channel) connect(ctx context.Context) error {
 			continue
 		}
 		if p.S != nil {
+			c.seqMu.Lock()
 			c.seq = *p.S
+			c.seqMu.Unlock()
 		}
 
 		switch p.Op {
@@ -96,7 +102,7 @@ func (c *Channel) connect(ctx context.Context) error {
 				HeartbeatInterval int `json:"heartbeat_interval"`
 			}
 			json.Unmarshal(p.D, &hello)
-			go c.heartbeat(ctx, conn, time.Duration(hello.HeartbeatInterval)*time.Millisecond)
+			go c.heartbeat(connCtx, conn, time.Duration(hello.HeartbeatInterval)*time.Millisecond)
 			if err := c.identify(conn); err != nil {
 				return err
 			}
@@ -144,7 +150,10 @@ func (c *Channel) heartbeat(ctx context.Context, conn *websocket.Conn, interval 
 		case <-ctx.Done():
 			return
 		case <-t.C:
-			data, _ := json.Marshal(map[string]any{"op": 1, "d": c.seq})
+			c.seqMu.Lock()
+			seq := c.seq
+			c.seqMu.Unlock()
+			data, _ := json.Marshal(map[string]any{"op": 1, "d": seq})
 			conn.WriteMessage(websocket.TextMessage, data)
 		}
 	}
