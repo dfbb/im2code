@@ -1,0 +1,12 @@
+prefix: "#"
+
+tmux:
+  idle_timeout: 2s
+  max_output_lines: 50
+  prompt_patterns:
+    - '[$#>]\s*$'
+
+channels:
+  telegram:
+    token: "test-token"
+    allow_from: []
