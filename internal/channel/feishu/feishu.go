@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 
 	lark "github.com/larksuite/oapi-sdk-go/v3"
 	larkcore "github.com/larksuite/oapi-sdk-go/v3/core"
@@ -35,14 +36,13 @@ func New(appID, appSecret string, allowFrom []string, inbound chan<- channel.Inb
 		appSecret: appSecret,
 		allowFrom: allow,
 		inbound:   inbound,
+		apiClient: lark.NewClient(appID, appSecret),
 	}
 }
 
 func (c *Channel) Name() string { return "feishu" }
 
 func (c *Channel) Start(ctx context.Context) error {
-	c.apiClient = lark.NewClient(c.appID, c.appSecret)
-
 	// Build event dispatcher (no verification token / encrypt key needed for WS mode).
 	d := dispatcher.NewEventDispatcher("", "").
 		OnP2MessageReceiveV1(c.onMessage)
@@ -114,6 +114,27 @@ func (c *Channel) Stop() error {
 	return nil
 }
 
+func (c *Channel) sendChunk(receiveID, content string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	req := larkim.NewCreateMessageReqBuilder().
+		ReceiveIdType("chat_id").
+		Body(larkim.NewCreateMessageReqBodyBuilder().
+			ReceiveId(receiveID).
+			MsgType("text").
+			Content(content).
+			Build()).
+		Build()
+	resp, err := c.apiClient.Im.V1.Message.Create(ctx, req)
+	if err != nil {
+		return err
+	}
+	if resp.Code != 0 {
+		return fmt.Errorf("feishu send error: code=%d msg=%s", resp.Code, resp.Msg)
+	}
+	return nil
+}
+
 func (c *Channel) Send(msg channel.OutboundMessage) error {
 	if c.apiClient == nil {
 		return fmt.Errorf("feishu: not started")
@@ -124,25 +145,8 @@ func (c *Channel) Send(msg channel.OutboundMessage) error {
 		if err != nil {
 			return fmt.Errorf("feishu: marshal content: %w", err)
 		}
-		content := string(contentBytes)
-		msgType := "text"
-		receiveID := msg.ChatID
-
-		req := larkim.NewCreateMessageReqBuilder().
-			ReceiveIdType("chat_id").
-			Body(larkim.NewCreateMessageReqBodyBuilder().
-				ReceiveId(receiveID).
-				MsgType(msgType).
-				Content(content).
-				Build()).
-			Build()
-
-		resp, err := c.apiClient.Im.V1.Message.Create(context.Background(), req)
-		if err != nil {
+		if err := c.sendChunk(msg.ChatID, string(contentBytes)); err != nil {
 			return fmt.Errorf("feishu: send: %w", err)
-		}
-		if !resp.Success() {
-			return fmt.Errorf("feishu: send error %d: %s", resp.Code, resp.Msg)
 		}
 	}
 	return nil

@@ -36,5 +36,6 @@ func (c *Channel) Stop() error {
 }
 
 func (c *Channel) Send(msg channel.OutboundMessage) error {
+	slog.Warn("qq: adapter not fully implemented; Send is a no-op", "chatID", msg.ChatID)
 	return nil
 }

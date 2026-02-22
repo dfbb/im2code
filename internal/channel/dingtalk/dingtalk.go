@@ -2,6 +2,7 @@ package dingtalk
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 
 	"github.com/open-dingtalk/dingtalk-stream-sdk-go/chatbot"
@@ -16,6 +17,7 @@ type Channel struct {
 	clientSecret string
 	allowFrom    map[string]bool
 	inbound      chan<- channel.InboundMessage
+	cli          *client.StreamClient
 }
 
 func New(clientID, clientSecret string, allowFrom []string, inbound chan<- channel.InboundMessage) *Channel {
@@ -34,20 +36,19 @@ func New(clientID, clientSecret string, allowFrom []string, inbound chan<- chann
 func (c *Channel) Name() string { return "dingtalk" }
 
 func (c *Channel) Start(ctx context.Context) error {
-	cli := client.NewStreamClient(
+	c.cli = client.NewStreamClient(
 		client.WithAppCredential(client.NewAppCredentialConfig(c.clientID, c.clientSecret)),
 	)
 
-	cli.RegisterChatBotCallbackRouter(c.onMessage)
+	c.cli.RegisterChatBotCallbackRouter(c.onMessage)
 
 	slog.Info("dingtalk: starting stream client")
-	if err := cli.Start(ctx); err != nil {
+	if err := c.cli.Start(ctx); err != nil {
 		return err
 	}
 
-	// cli.Start does not block; wait until context is cancelled.
+	// c.cli.Start does not block; wait until context is cancelled.
 	<-ctx.Done()
-	cli.Close()
 	return nil
 }
 
@@ -59,6 +60,9 @@ func (c *Channel) onMessage(ctx context.Context, data *chatbot.BotCallbackDataMo
 	senderID := data.SenderStaffId
 	chatID := data.ConversationId
 	text := data.Text.Content
+	if text == "" {
+		return nil, nil // non-text message, skip
+	}
 
 	// Apply allowFrom filter.
 	if len(c.allowFrom) > 0 && !c.allowFrom[senderID] {
@@ -82,14 +86,13 @@ func (c *Channel) onMessage(ctx context.Context, data *chatbot.BotCallbackDataMo
 }
 
 func (c *Channel) Stop() error {
-	// The stream client is closed in Start when ctx is cancelled.
+	if c.cli != nil {
+		c.cli.Close()
+	}
 	return nil
 }
 
 func (c *Channel) Send(msg channel.OutboundMessage) error {
-	// DingTalk chatbot replies require the per-message session webhook URL
-	// which is only available in the inbound message context. Full send
-	// support can be added later when a session-webhook registry is wired in.
-	slog.Warn("dingtalk: Send not implemented; outbound messages require session webhook", "chatID", msg.ChatID)
-	return nil
+	slog.Warn("dingtalk: Send not implemented; requires per-message session webhook", "chatID", msg.ChatID)
+	return fmt.Errorf("dingtalk: Send not implemented")
 }
