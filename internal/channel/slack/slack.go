@@ -18,6 +18,7 @@ type Channel struct {
 	allowFrom map[string]bool
 	inbound   chan<- channel.InboundMessage
 	client    *goslack.Client
+	cancel    context.CancelFunc
 }
 
 func New(botToken, appToken string, allowFrom []string, inbound chan<- channel.InboundMessage) *Channel {
@@ -31,6 +32,9 @@ func New(botToken, appToken string, allowFrom []string, inbound chan<- channel.I
 func (c *Channel) Name() string { return "slack" }
 
 func (c *Channel) Start(ctx context.Context) error {
+	innerCtx, cancel := context.WithCancel(ctx)
+	c.cancel = cancel
+
 	api := goslack.New(c.botToken, goslack.OptionAppLevelToken(c.appToken))
 	c.client = api
 	sm := socketmode.New(api)
@@ -53,10 +57,11 @@ func (c *Channel) Start(ctx context.Context) error {
 
 	authTest, err := api.AuthTest()
 	if err != nil {
+		cancel()
 		return err
 	}
 	slog.Info("slack connected", "bot", authTest.User, "team", authTest.Team)
-	return sm.RunContext(ctx)
+	return sm.RunContext(innerCtx)
 }
 
 func (c *Channel) handleInner(event slackevents.EventsAPIInnerEvent) {
@@ -77,7 +82,12 @@ func (c *Channel) handleInner(event slackevents.EventsAPIInnerEvent) {
 	}
 }
 
-func (c *Channel) Stop() error { return nil }
+func (c *Channel) Stop() error {
+	if c.cancel != nil {
+		c.cancel()
+	}
+	return nil
+}
 
 func (c *Channel) Send(msg channel.OutboundMessage) error {
 	if c.client == nil {
