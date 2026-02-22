@@ -47,7 +47,10 @@ func init() {
 func runStart(cmd *cobra.Command, args []string) error {
 	cfg, err := config.Load(configPath())
 	if err != nil {
-		// If config file doesn't exist, use defaults.
+		if !os.IsNotExist(err) {
+			return fmt.Errorf("loading config: %w", err)
+		}
+		slog.Info("no config file found, using defaults", "path", configPath())
 		cfg = &config.Config{
 			Prefix: "#",
 			Tmux: config.TmuxConfig{
@@ -63,7 +66,10 @@ func runStart(cmd *cobra.Command, args []string) error {
 		prefix = flagPrefix
 	}
 
-	home, _ := os.UserHomeDir()
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("determining home directory: %w", err)
+	}
 	dataDir := home + "/.im2code"
 	if err := os.MkdirAll(dataDir, 0700); err != nil {
 		return fmt.Errorf("creating data dir: %w", err)
@@ -107,6 +113,8 @@ func runStart(cmd *cobra.Command, args []string) error {
 	if enabled("slack") && cfg.Channels.Slack.BotToken != "" {
 		mgr.Register(slack.New(cfg.Channels.Slack.BotToken, cfg.Channels.Slack.AppToken, cfg.Channels.Slack.AllowFrom, inbound))
 	}
+	// WhatsApp has no token-based credential: its first-run flow presents a QR
+	// code on stderr for pairing. Always include it when the channel is enabled.
 	if enabled("whatsapp") {
 		mgr.Register(whatsapp.New(cfg.Channels.WhatsApp.SessionDir, nil, inbound))
 	}
@@ -125,23 +133,38 @@ func runStart(cmd *cobra.Command, args []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	// Route inbound messages to router.
+	var wg sync.WaitGroup
+
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		for {
 			select {
 			case <-ctx.Done():
-				return
+				// Drain remaining buffered messages before exiting.
+				for {
+					select {
+					case msg := <-inbound:
+						rtr.Handle(msg)
+					default:
+						return
+					}
+				}
 			case msg := <-inbound:
 				rtr.Handle(msg)
 			}
 		}
 	}()
 
-	// Watch subscriptions and run idle detectors.
-	go watchSubscriptions(ctx, subs, bridge, idleTimeout, cfg.Tmux.MaxOutputLines, promptMatcher, outbound)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		watchSubscriptions(ctx, subs, bridge, idleTimeout, cfg.Tmux.MaxOutputLines, promptMatcher, outbound)
+	}()
 
 	slog.Info("im2code started", "prefix", prefix)
 	mgr.Run(ctx)
+	wg.Wait()
 	slog.Info("im2code stopped")
 	return nil
 }
@@ -158,32 +181,17 @@ func watchSubscriptions(
 	pm *tmux.PromptMatcher,
 	outbound chan<- channel.OutboundMessage,
 ) {
-	watching := make(map[string]context.CancelFunc)
-	var mu sync.Mutex
-
-	stopAll := func() {
-		mu.Lock()
-		defer mu.Unlock()
-		for key, cancel := range watching {
-			cancel()
-			delete(watching, key)
-		}
-	}
-
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
-			stopAll()
+			// TODO: cancel all active idle-detector goroutines here.
 			return
 		case <-ticker.C:
-			// Placeholder: idle detection goroutines are started here
-			// when watch mode is wired through the router state.
-			// The IdleDetector in internal/tmux/idle.go is ready to use.
-			_ = watching
-			_ = mu
+			// TODO: query router watch state and start/stop IdleDetector
+			// goroutines per subscription. See internal/tmux/idle.go.
 		}
 	}
 }
