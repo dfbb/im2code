@@ -11,11 +11,16 @@ import (
 // Full implementation requires QQ Bot Gateway app registration and is similar
 // in structure to the Discord adapter. It is left as a placeholder.
 type Channel struct {
-	inbound chan<- channel.InboundMessage
+	allowFrom map[string]bool
+	inbound   chan<- channel.InboundMessage
 }
 
-func New(inbound chan<- channel.InboundMessage) *Channel {
-	return &Channel{inbound: inbound}
+func New(allowFrom []string, inbound chan<- channel.InboundMessage) *Channel {
+	allow := make(map[string]bool)
+	for _, id := range allowFrom {
+		allow[id] = true
+	}
+	return &Channel{allowFrom: allow, inbound: inbound}
 }
 
 func (c *Channel) Name() string { return "qq" }
