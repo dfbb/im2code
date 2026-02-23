@@ -6,13 +6,13 @@ Bridge IM messages to tmux terminal sessions. Control your running code directly
 
 | Platform | Status |
 |----------|--------|
-| Feishu / Lark | Tested |
-| WhatsApp | Tested |
-| Telegram | Tested |
-| Slack | Tested |
-| Discord | Tested |
-| QQ | Untested |
-| DingTalk | Untested |
+| Feishu / Lark | :white_check_mark: Tested |
+| WhatsApp | :white_check_mark: Tested |
+| Telegram | :white_check_mark: Tested |
+| Slack | :white_check_mark: Tested |
+| Discord | :white_check_mark: Tested |
+| QQ | :x: Untested |
+| DingTalk | :x: Untested |
 
 ---
 
