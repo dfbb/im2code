@@ -48,7 +48,7 @@ func loginToken(cfgPath, chName, label string) error {
 	if err != nil {
 		return err
 	}
-	return updateConfig(cfgPath, func(raw map[string]any) {
+	return saveConfig(cfgPath, func(raw map[string]any) {
 		channels := getOrCreateMap(raw, "channels")
 		ch := getOrCreateMap(channels, chName)
 		ch["token"] = token
@@ -60,7 +60,7 @@ func loginSlack(cfgPath string) error {
 	botToken, _ := readSecret()
 	fmt.Print("App Token (xapp-...): ")
 	appToken, _ := readSecret()
-	return updateConfig(cfgPath, func(raw map[string]any) {
+	return saveConfig(cfgPath, func(raw map[string]any) {
 		channels := getOrCreateMap(raw, "channels")
 		ch := getOrCreateMap(channels, "slack")
 		ch["bot_token"] = botToken
@@ -73,7 +73,7 @@ func loginFeishu(cfgPath string) error {
 	appID, _ := readLine()
 	fmt.Print("App Secret: ")
 	appSecret, _ := readSecret()
-	return updateConfig(cfgPath, func(raw map[string]any) {
+	return saveConfig(cfgPath, func(raw map[string]any) {
 		channels := getOrCreateMap(raw, "channels")
 		ch := getOrCreateMap(channels, "feishu")
 		ch["app_id"] = appID
@@ -86,7 +86,7 @@ func loginDingTalk(cfgPath string) error {
 	clientID, _ := readLine()
 	fmt.Print("Client Secret: ")
 	clientSecret, _ := readSecret()
-	return updateConfig(cfgPath, func(raw map[string]any) {
+	return saveConfig(cfgPath, func(raw map[string]any) {
 		channels := getOrCreateMap(raw, "channels")
 		ch := getOrCreateMap(channels, "dingtalk")
 		ch["client_id"] = clientID
@@ -99,7 +99,7 @@ func loginQQ(cfgPath string) error {
 	appID, _ := readLine()
 	fmt.Print("Secret: ")
 	secret, _ := readSecret()
-	return updateConfig(cfgPath, func(raw map[string]any) {
+	return saveConfig(cfgPath, func(raw map[string]any) {
 		channels := getOrCreateMap(raw, "channels")
 		ch := getOrCreateMap(channels, "qq")
 		ch["app_id"] = appID
@@ -135,6 +135,14 @@ func configPath() string {
 	}
 	home, _ := os.UserHomeDir()
 	return home + "/.im2code/config.yaml"
+}
+
+func saveConfig(path string, fn func(map[string]any)) error {
+	if err := updateConfig(path, fn); err != nil {
+		return err
+	}
+	fmt.Printf("Saved to %s\n", path)
+	return nil
 }
 
 func updateConfig(path string, fn func(map[string]any)) error {
