@@ -153,6 +153,27 @@ func (c *Channel) Send(msg channel.OutboundMessage) error {
 	return nil
 }
 
+// Connect establishes a brief WebSocket connection to the Feishu platform.
+// Feishu requires at least one successful WS connection before the long-connection
+// mode option becomes available in the developer console.
+func Connect(appID, appSecret string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	d := dispatcher.NewEventDispatcher("", "")
+	wsClient := larkws.NewClient(appID, appSecret,
+		larkws.WithEventHandler(d),
+		larkws.WithLogLevel(larkcore.LogLevelError),
+	)
+
+	err := wsClient.Start(ctx)
+	// Context timeout is the expected exit path — connection was successfully established.
+	if ctx.Err() != nil {
+		return nil
+	}
+	return err
+}
+
 // CheckToken verifies the app credentials by fetching a tenant access token.
 func CheckToken(appID, appSecret string) (string, error) {
 	body := fmt.Sprintf(`{"app_id":%q,"app_secret":%q}`, appID, appSecret)

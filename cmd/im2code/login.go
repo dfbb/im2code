@@ -104,12 +104,21 @@ func loginFeishu(cfgPath string) error {
 		return fmt.Errorf("login failed: %w", err)
 	}
 	fmt.Printf("OK (%s)\n", identity)
-	return saveConfig(cfgPath, func(raw map[string]any) {
+	if err := saveConfig(cfgPath, func(raw map[string]any) {
 		channels := getOrCreateMap(raw, "channels")
 		ch := getOrCreateMap(channels, "feishu")
 		ch["app_id"] = appID
 		ch["app_secret"] = appSecret
-	})
+	}); err != nil {
+		return err
+	}
+	fmt.Print("Connecting to Feishu WebSocket (unlocks long-connection mode in console)... ")
+	if err := feishuch.Connect(appID, appSecret); err != nil {
+		fmt.Printf("warning: %v\n", err)
+	} else {
+		fmt.Println("Done.")
+	}
+	return nil
 }
 
 func loginDingTalk(cfgPath string) error {
