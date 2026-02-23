@@ -160,7 +160,7 @@ func splitMessage(text string, maxLen int) []string {
 	lines := strings.Split(text, "\n")
 	var cur strings.Builder
 	for _, line := range lines {
-		if cur.Len()+len(line)+1 > maxLen {
+		if cur.Len() > 0 && cur.Len()+len(line)+1 > maxLen {
 			chunks = append(chunks, cur.String())
 			cur.Reset()
 		}

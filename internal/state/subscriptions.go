@@ -2,6 +2,7 @@ package state
 
 import (
 	"encoding/json"
+	"log/slog"
 	"os"
 	"sync"
 )
@@ -67,6 +68,12 @@ func (s *Subscriptions) load() error {
 }
 
 func (s *Subscriptions) save() {
-	data, _ := json.MarshalIndent(s.data, "", "  ")
-	os.WriteFile(s.path, data, 0600)
+	data, err := json.MarshalIndent(s.data, "", "  ")
+	if err != nil {
+		slog.Error("subscriptions: marshal failed", "err", err)
+		return
+	}
+	if err := os.WriteFile(s.path, data, 0600); err != nil {
+		slog.Error("subscriptions: write failed", "path", s.path, "err", err)
+	}
 }

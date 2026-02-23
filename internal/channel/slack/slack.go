@@ -73,11 +73,16 @@ func (c *Channel) handleInner(event slackevents.EventsAPIInnerEvent) {
 		if len(c.allowFrom) > 0 && !c.allowFrom[ev.User] {
 			return
 		}
-		c.inbound <- channel.InboundMessage{
+		inMsg := channel.InboundMessage{
 			Channel:  "slack",
 			ChatID:   ev.Channel,
 			SenderID: ev.User,
 			Text:     ev.Text,
+		}
+		select {
+		case c.inbound <- inMsg:
+		default:
+			slog.Warn("slack: inbound queue full, dropping message", "channel", ev.Channel)
 		}
 	}
 }
@@ -121,7 +126,7 @@ func splitMessage(text string, maxLen int) []string {
 	lines := strings.Split(text, "\n")
 	var cur strings.Builder
 	for _, line := range lines {
-		if cur.Len()+len(line)+1 > maxLen {
+		if cur.Len() > 0 && cur.Len()+len(line)+1 > maxLen {
 			chunks = append(chunks, cur.String())
 			cur.Reset()
 		}

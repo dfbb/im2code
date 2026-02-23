@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 
+	"github.com/dfbb/im2code/internal/channel/discord"
+	slackch "github.com/dfbb/im2code/internal/channel/slack"
 	"github.com/dfbb/im2code/internal/channel/telegram"
 	"github.com/dfbb/im2code/internal/config"
 	"github.com/spf13/cobra"
@@ -76,6 +78,10 @@ func checkTelegramToken(token string) (string, error) {
 	return telegram.CheckToken(token)
 }
 
-// Stubs — will be replaced when adapters are implemented in Tasks 11-14.
-func checkDiscordToken(_ string) (string, error) { return "token set", nil }
-func checkSlackToken(_ string) (string, error)   { return "token set", nil }
+func checkDiscordToken(token string) (string, error) {
+	return discord.CheckToken(token)
+}
+
+func checkSlackToken(token string) (string, error) {
+	return slackch.CheckToken(token)
+}
