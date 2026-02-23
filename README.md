@@ -9,10 +9,10 @@ Bridge IM messages to tmux terminal sessions. Control your running code directly
 | Feishu / Lark | Tested |
 | WhatsApp | Tested |
 | Telegram | Tested |
+| Slack | Tested |
+| Discord | Tested |
 | QQ | Untested |
 | DingTalk | Untested |
-| Slack | Untested |
-| Discord | Untested |
 
 ---
 
@@ -213,16 +213,31 @@ Send `#im2code` in the channel where you want to use the bot. The bot locks to t
 
 - Open [Slack API](https://api.slack.com/apps) → **Create New App** → **From scratch**
 - **OAuth & Permissions → Bot Token Scopes**: add `chat:write`, `channels:history`, `im:history`
-- **Event Subscriptions**: enable and subscribe to `message.channels`, `message.im`
-- **Socket Mode**: enable (this is how the App Token is used)
 - **Install App** to your workspace to get the `xoxb-` Bot Token
 
-**2. Get an App Token**
+**2. Enable Socket Mode and get an App Token**
 
-- **Basic Information → App-Level Tokens** → **Generate Token and Scopes**
-- Add the `connections:write` scope; the generated token starts with `xapp-`
+Socket Mode must be enabled **before** configuring Event Subscriptions, otherwise the save button will be grayed out.
 
-**3. Configure**
+- Left sidebar → **Socket Mode** → enable **Enable Socket Mode**
+- When prompted, generate an App-Level Token: add the `connections:write` scope; the token starts with `xapp-`
+
+**3. Subscribe to events**
+
+- Left sidebar → **Event Subscriptions** → enable **Enable Events**
+- With Socket Mode active, the Request URL field is grayed out (no public URL needed)
+- Under **Subscribe to bot events**, click **Add Bot User Event** and add:
+  - `message.channels`
+  - `message.im`
+- Click **Save Changes**
+
+> If the Save button is still grayed out, make sure at least one event has been added — an empty event list also disables the button.
+
+**4. Reinstall the app**
+
+After changing permissions, go to **OAuth & Permissions** → **Reinstall App to Workspace**.
+
+**5. Configure**
 
 ```bash
 im2code login slack
@@ -230,9 +245,11 @@ im2code login slack
 # App Token (xapp-...):
 ```
 
-**4. Activate**
+**6. Activate**
 
 Send `#im2code` in the channel or DM where you want to use the bot. The bot locks to that sender. To pre-restrict to specific channels or users, set `allow_from` to a list of channel or user IDs.
+
+> Slack rejects messages beginning with `/`. To send a slash-prefixed command, prefix it with a space: ` /your-command`. im2code strips the leading space automatically.
 
 ---
 
