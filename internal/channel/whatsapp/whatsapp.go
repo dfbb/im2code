@@ -114,7 +114,22 @@ func (c *Channel) eventHandler(evt interface{}) {
 		if v.Info.IsFromMe {
 			return
 		}
-		senderID := v.Info.Sender.String()
+
+		// Extract text before any sender filtering so that non-text events
+		// (receipts, stickers, system messages) cannot trigger auto-lock.
+		text := ""
+		if v.Message.GetConversation() != "" {
+			text = v.Message.GetConversation()
+		} else if v.Message.GetExtendedTextMessage() != nil {
+			text = v.Message.GetExtendedTextMessage().GetText()
+		}
+		if text == "" {
+			return
+		}
+
+		// Strip device suffix (number:3@s.whatsapp.net → number@s.whatsapp.net)
+		// so the same person is recognised across all their devices.
+		senderID := v.Info.Sender.ToNonAD().String()
 
 		if len(c.allowFrom) > 0 {
 			// Static allow list.
@@ -122,7 +137,7 @@ func (c *Channel) eventHandler(evt interface{}) {
 				return
 			}
 		} else {
-			// Auto-lock: accept the first sender, reject everyone else.
+			// Auto-lock: accept the first text-message sender, reject everyone else.
 			c.mu.Lock()
 			if c.lockedID == "" {
 				c.lockedID = senderID
@@ -138,18 +153,7 @@ func (c *Channel) eventHandler(evt interface{}) {
 			}
 			c.mu.Unlock()
 		}
-		text := ""
-		if v.Message.GetConversation() != "" {
-			text = v.Message.GetConversation()
-		} else if v.Message.GetExtendedTextMessage() != nil {
-			text = v.Message.GetExtendedTextMessage().GetText()
-		}
-		if text == "" {
-			return
-		}
-		// Fix #1: use a non-blocking send so a full inbound queue does not stall
-		// the whatsmeow WebSocket read goroutine (eventHandler is called
-		// synchronously on that goroutine).
+
 		msg := channel.InboundMessage{
 			Channel:  "whatsapp",
 			ChatID:   v.Info.Chat.String(),
