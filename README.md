@@ -2,6 +2,20 @@
 
 Bridge IM messages to tmux terminal sessions. Control your running code directly from Telegram, Discord, Slack, WhatsApp, Feishu, DingTalk, or QQ.
 
+## Supported Platforms
+
+| Platform | Status |
+|----------|--------|
+| Feishu / Lark | Tested |
+| WhatsApp | Tested |
+| Telegram | Tested |
+| QQ | Untested |
+| DingTalk | Untested |
+| Slack | Untested |
+| Discord | Untested |
+
+---
+
 ## How It Works
 
 ```
