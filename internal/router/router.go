@@ -19,6 +19,7 @@ const helpText = `Available commands:
   {P}status            — show current binding
   {P}snap              — capture and send current pane
   {P}watch on|off      — toggle real-time push
+  {P}setivl min,max    — set watch intervals (e.g. 5s,20s); no args prints current
   {P}key <key>         — send control key (e.g. ctrl-c)
   {P}help              — show this message`
 
@@ -36,7 +37,8 @@ type Router struct {
 	onActivate    func(ch, senderID string) // called when a channel is first activated
 	history       CommandHistory
 	promptMatcher *tmux.PromptMatcher
-	watchMin      time.Duration // cooldown / stability window for post-command snap
+	watchMin      time.Duration
+	watchMax      time.Duration
 	maxLines      int
 	watching      map[string]bool
 	mu            sync.RWMutex
@@ -53,6 +55,7 @@ func New(
 	hist CommandHistory,
 	promptMatcher *tmux.PromptMatcher,
 	watchMin time.Duration,
+	watchMax time.Duration,
 	maxLines int,
 ) *Router {
 	return &Router{
@@ -64,10 +67,25 @@ func New(
 		history:       hist,
 		promptMatcher: promptMatcher,
 		watchMin:      watchMin,
+		watchMax:      watchMax,
 		maxLines:      maxLines,
 		watching:      make(map[string]bool),
 		activated:     make(map[string]string),
 	}
+}
+
+// WatchIntervals returns the current watchMin and watchMax durations.
+func (r *Router) WatchIntervals() (min, max time.Duration) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.watchMin, r.watchMax
+}
+
+func (r *Router) setWatchIntervals(min, max time.Duration) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.watchMin = min
+	r.watchMax = max
 }
 
 func (r *Router) record(msg channel.InboundMessage) {
@@ -295,6 +313,40 @@ func (r *Router) handleCommand(msg channel.InboundMessage) {
 		default:
 			r.reply(msg, fmt.Sprintf("Usage: %swatch on|off", r.prefix))
 		}
+
+	case "setivl":
+		const setivlUsage = "Usage: %ssetivl min,max — both in range 1s–3600s (e.g. 5s,20s)\nCurrent: min=%s max=%s"
+		if len(args) == 0 {
+			min, max := r.WatchIntervals()
+			r.reply(msg, fmt.Sprintf(setivlUsage, r.prefix, min, max))
+			return
+		}
+		pair := strings.SplitN(args[0], ",", 2)
+		if len(pair) != 2 {
+			min, max := r.WatchIntervals()
+			r.reply(msg, fmt.Sprintf(setivlUsage, r.prefix, min, max))
+			return
+		}
+		newMin, errMin := time.ParseDuration(strings.TrimSpace(pair[0]))
+		newMax, errMax := time.ParseDuration(strings.TrimSpace(pair[1]))
+		if errMin != nil || errMax != nil || newMin <= 0 || newMax <= 0 {
+			min, max := r.WatchIntervals()
+			r.reply(msg, fmt.Sprintf(setivlUsage, r.prefix, min, max))
+			return
+		}
+		// Clamp both to 1s–3600s.
+		if newMin < time.Second {
+			newMin = time.Second
+		} else if newMin > 3600*time.Second {
+			newMin = 3600 * time.Second
+		}
+		if newMax < time.Second {
+			newMax = time.Second
+		} else if newMax > 3600*time.Second {
+			newMax = 3600 * time.Second
+		}
+		r.setWatchIntervals(newMin, newMax)
+		r.reply(msg, fmt.Sprintf("Watch intervals updated: min=%s max=%s", newMin, newMax))
 
 	case "key":
 		if len(args) == 0 {

@@ -91,8 +91,8 @@ func runStart(cmd *cobra.Command, args []string) error {
 		idleTimeout = 2 * time.Second
 	}
 
-	watchTimeMin := parseClamped(cfg.Tmux.WatchTimeMin, 5*time.Second, time.Second, 30*time.Second)
-	watchTimeMax := parseClamped(cfg.Tmux.WatchTimeMax, 20*time.Second, 5*time.Second, 3600*time.Second)
+	watchTimeMin := parseClamped(cfg.Tmux.WatchTimeMin, 5*time.Second, time.Second, 3600*time.Second)
+	watchTimeMax := parseClamped(cfg.Tmux.WatchTimeMax, 20*time.Second, time.Second, 3600*time.Second)
 
 	bridge := tmux.New()
 	promptMatcher := tmux.NewPromptMatcher(cfg.Tmux.PromptPatterns)
@@ -161,7 +161,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 	}
 	defer hist.Close()
 
-	rtr := router.New(prefix, subs, bridge, outbound, onActivate, hist, promptMatcher, watchTimeMin, cfg.Tmux.MaxOutputLines)
+	rtr := router.New(prefix, subs, bridge, outbound, onActivate, hist, promptMatcher, watchTimeMin, watchTimeMax, cfg.Tmux.MaxOutputLines)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -217,9 +217,47 @@ func watchSubscriptions(
 ) {
 	// maps session name → cancel func for its running IdleDetector
 	active := make(map[string]context.CancelFunc)
+	// track the intervals used to start each active detector
+	activeMin := make(map[string]time.Duration)
+	activeMax := make(map[string]time.Duration)
 
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
+
+	startDetector := func(s string, wMin, wMax time.Duration) {
+		detCtx, cancel := context.WithCancel(ctx)
+		active[s] = cancel
+		activeMin[s] = wMin
+		activeMax[s] = wMax
+
+		onIdle := func(content string) {
+			current := rtr.WatchedChats()
+			for chatKey, sess := range current {
+				if sess != s {
+					continue
+				}
+				parts := strings.SplitN(chatKey, ":", 2)
+				if len(parts) != 2 {
+					continue
+				}
+				msg := channel.OutboundMessage{
+					Channel: parts[0],
+					ChatID:  parts[1],
+					Text:    "```\n" + content + "\n```",
+				}
+				select {
+				case outbound <- msg:
+				default:
+					slog.Warn("watchSubscriptions: outbound full, dropping capture",
+						"session", s)
+				}
+			}
+		}
+
+		det := tmux.NewIdleDetector(bridge, s, wMin, wMax, maxLines, pm, onIdle)
+		go det.Run(detCtx)
+		slog.Info("watch: started idle detector", "session", s, "min", wMin, "max", wMax)
+	}
 
 	for {
 		select {
@@ -229,6 +267,8 @@ func watchSubscriptions(
 			}
 			return
 		case <-ticker.C:
+			curMin, curMax := rtr.WatchIntervals()
+
 			// Get current snapshot: chatKey → session for all watched chats
 			watched := rtr.WatchedChats() // map[chatKey]session
 
@@ -243,47 +283,28 @@ func watchSubscriptions(
 				if !needed[session] {
 					cancel()
 					delete(active, session)
+					delete(activeMin, session)
+					delete(activeMax, session)
 				}
 			}
 
-			// Start detectors for newly watched sessions
+			// Restart detectors whose intervals have changed
+			for session, cancel := range active {
+				if activeMin[session] != curMin || activeMax[session] != curMax {
+					cancel()
+					delete(active, session)
+					delete(activeMin, session)
+					delete(activeMax, session)
+					slog.Info("watch: restarting idle detector due to interval change", "session", session)
+				}
+			}
+
+			// Start detectors for newly watched sessions (or restarted ones)
 			for _, session := range watched {
 				if _, ok := active[session]; ok {
 					continue // already running
 				}
-				s := session // capture for closure
-				detCtx, cancel := context.WithCancel(ctx)
-				active[s] = cancel
-
-				onIdle := func(content string) {
-					// Re-query current watchers each time so new subscribers
-					// get output without restarting the detector.
-					current := rtr.WatchedChats()
-					for chatKey, sess := range current {
-						if sess != s {
-							continue
-						}
-						parts := strings.SplitN(chatKey, ":", 2)
-						if len(parts) != 2 {
-							continue
-						}
-						msg := channel.OutboundMessage{
-							Channel: parts[0],
-							ChatID:  parts[1],
-							Text:    "```\n" + content + "\n```",
-						}
-						select {
-						case outbound <- msg:
-						default:
-							slog.Warn("watchSubscriptions: outbound full, dropping capture",
-								"session", s)
-						}
-					}
-				}
-
-				det := tmux.NewIdleDetector(bridge, s, watchMin, watchMax, maxLines, pm, onIdle)
-				go det.Run(detCtx)
-				slog.Info("watch: started idle detector", "session", s)
+				startDetector(session, curMin, curMax)
 			}
 		}
 	}

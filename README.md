@@ -94,9 +94,15 @@ After binding, every plain message you send is forwarded to the terminal via `tm
 #snap              — capture the current pane (last 50 lines)
 #watch on          — push output automatically when the terminal goes idle
 #watch off         — stop automatic pushes
+#setivl min,max    — adjust watch intervals live (e.g. #setivl 5s,20s)
 ```
 
-With `#watch on`, output is sent back to the chat each time a shell prompt is detected (i.e., the running command has finished).
+Every plain-text command you send is echoed back as a terminal snapshot ~500ms after it runs, regardless of watch mode.
+
+With `#watch on`, output is pushed automatically:
+- **Immediately** when a shell prompt is detected (command finished)
+- **Periodically** (every `watchtime_max`) if the terminal changes but no prompt appears
+- Suppressed if nothing has changed since the last push
 
 ### 6. Send control keys
 
@@ -325,9 +331,21 @@ Send `#im2code` as a private (C2C) message to the bot. The bot locks to your ope
 
 Config file location: `~/.im2code/config.yaml`
 
+Missing fields are written back with their defaults on every startup, so the file stays self-documenting.
+
 ```yaml
 # Bridge command prefix. Default: "#"
 prefix: "#"
+
+# Log level: debug | info | warn | error. Default: "warn"
+loglevel: "warn"
+
+# Log file path. Relative paths resolve to the same directory as the executable.
+logfile: "./im2code.log"
+
+# SQLite database for command history (all user inputs with timestamp and sender).
+# Default: ~/.im2code/cmd_history.db
+cmd_history_db: ""
 
 tmux:
   # How long to wait after a prompt is detected before pushing output
@@ -338,6 +356,10 @@ tmux:
   prompt_patterns:
     - '[$#>]\s*$'   # bash / zsh / sh
     - '>>>\s*$'     # Python REPL
+  # Minimum interval between automatic watch pushes (1s–3600s). Default: "5s"
+  watchtime_min: "5s"
+  # Periodic push interval when terminal is idle (1s–3600s). Default: "20s"
+  watchtime_max: "20s"
 
 channels:
   telegram:
@@ -396,15 +418,16 @@ im2code version             Print version
 ### In-chat bridge commands (default prefix `#`)
 
 ```
-#im2code           activate the bot and lock it to your sender ID (first use)
-#list              list tmux sessions
-#attach <session>  bind this chat to a session
-#detach            remove the binding
-#status            show current session and watch state
-#snap              capture the current pane
-#watch on|off      enable / disable automatic output push
-#key <key>         send a control key (e.g. ctrl-c, ctrl-d, esc, Enter, Tab)
-#help              show available commands
+#im2code               activate the bot and lock it to your sender ID (first use)
+#list                  list tmux sessions
+#attach <session>      bind this chat to a session
+#detach                remove the binding
+#status                show current session and watch state
+#snap                  capture the current pane
+#watch on|off          enable / disable automatic output push
+#setivl min,max        set watch intervals (e.g. 5s,20s); no args prints current
+#key <key>             send a control key (e.g. ctrl-c, ctrl-d, esc, Enter, Tab)
+#help                  show available commands
 ```
 
 ---
@@ -413,7 +436,8 @@ im2code version             Print version
 
 ```
 ~/.im2code/
-├── config.yaml          configuration
+├── config.yaml          configuration (defaults written on first run)
 ├── subscriptions.json   session bindings (managed automatically)
+├── cmd_history.db       SQLite log of all user inputs
 └── whatsapp/            WhatsApp pairing data
 ```

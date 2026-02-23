@@ -20,8 +20,8 @@ type TmuxConfig struct {
 	IdleTimeout    string   `yaml:"idle_timeout"`
 	MaxOutputLines int      `yaml:"max_output_lines"`
 	PromptPatterns []string `yaml:"prompt_patterns"`
-	WatchTimeMin   string   `yaml:"watchtime_min"` // min interval between watch pushes (1s–30s), default 5s
-	WatchTimeMax   string   `yaml:"watchtime_max"` // periodic push interval when idle (5s–3600s), default 20s
+	WatchTimeMin   string   `yaml:"watchtime_min"` // min interval between watch pushes (1s–3600s), default 5s
+	WatchTimeMax   string   `yaml:"watchtime_max"` // periodic push interval when idle (1s–3600s), default 20s
 }
 
 type ChannelConfigs struct {
