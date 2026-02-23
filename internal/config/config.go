@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"path/filepath"
 
 	"gopkg.in/yaml.v3"
 )
@@ -19,6 +20,8 @@ type TmuxConfig struct {
 	IdleTimeout    string   `yaml:"idle_timeout"`
 	MaxOutputLines int      `yaml:"max_output_lines"`
 	PromptPatterns []string `yaml:"prompt_patterns"`
+	WatchTimeMin   string   `yaml:"watchtime_min"` // min interval between watch pushes (1s–30s), default 5s
+	WatchTimeMax   string   `yaml:"watchtime_max"` // periodic push interval when idle (5s–3600s), default 20s
 }
 
 type ChannelConfigs struct {
@@ -68,6 +71,11 @@ type QQConfig struct {
 	AllowFrom []string `yaml:"allow_from"`
 }
 
+// Defaults returns a Config populated with all default values.
+func Defaults() *Config {
+	return defaults()
+}
+
 func defaults() *Config {
 	return &Config{
 		Prefix:   "#",
@@ -77,6 +85,8 @@ func defaults() *Config {
 			IdleTimeout:    "2s",
 			MaxOutputLines: 50,
 			PromptPatterns: []string{`[$#>]\s*$`, `>>>\s*$`},
+			WatchTimeMin:   "5s",
+			WatchTimeMax:   "20s",
 		},
 	}
 }
@@ -94,4 +104,18 @@ func Load(path string) (*Config, error) {
 		return nil, err
 	}
 	return cfg, nil
+}
+
+// Save writes cfg to path in YAML format, creating parent directories as needed.
+// It is called on startup to persist any default values that were missing from
+// the existing file.
+func Save(path string, cfg *Config) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		return err
+	}
+	data, err := yaml.Marshal(cfg)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0600)
 }

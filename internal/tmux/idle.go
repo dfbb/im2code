@@ -77,27 +77,25 @@ func (d *ANSIActivityDetector) IsAnimating() bool {
 type IdleDetector struct {
 	bridge        *Bridge
 	session       string
-	timeout       time.Duration
+	minInterval   time.Duration // cooldown between pushes; also stability wait for non-prompt push
+	maxInterval   time.Duration // periodic push interval when no new content
 	maxLines      int
 	promptMatcher *PromptMatcher
 	lastContent   string
 	onIdle        func(content string)
 }
 
-func NewIdleDetector(bridge *Bridge, session string, timeout time.Duration, maxLines int, promptMatcher *PromptMatcher, onIdle func(string)) *IdleDetector {
+func NewIdleDetector(bridge *Bridge, session string, minInterval, maxInterval time.Duration, maxLines int, promptMatcher *PromptMatcher, onIdle func(string)) *IdleDetector {
 	return &IdleDetector{
 		bridge:        bridge,
 		session:       session,
-		timeout:       timeout,
+		minInterval:   minInterval,
+		maxInterval:   maxInterval,
 		maxLines:      maxLines,
 		promptMatcher: promptMatcher,
 		onIdle:        onIdle,
 	}
 }
-
-// watchInterval is how often output is pushed when there is new content but no
-// command has settled (e.g. a long-running background process).
-const watchInterval = 10 * time.Second
 
 // Run polls the tmux pane and calls onIdle when output settles. Blocks until ctx done.
 //
@@ -107,7 +105,7 @@ const watchInterval = 10 * time.Second
 func (d *IdleDetector) Run(ctx context.Context) {
 	pollTicker := time.NewTicker(100 * time.Millisecond)
 	defer pollTicker.Stop()
-	periodicTicker := time.NewTicker(watchInterval)
+	periodicTicker := time.NewTicker(d.maxInterval)
 	defer periodicTicker.Stop()
 
 	var lastChange time.Time
@@ -152,11 +150,11 @@ func (d *IdleDetector) Run(ctx context.Context) {
 			if content == lastPushed || lastChange.IsZero() {
 				continue
 			}
-			if !lastFired.IsZero() && time.Since(lastFired) < d.timeout {
+			if !lastFired.IsZero() && time.Since(lastFired) < d.minInterval {
 				continue
 			}
 
-			idle := time.Since(lastChange) > d.timeout
+			idle := time.Since(lastChange) > d.minInterval
 			promptFound := d.promptMatcher.Match(content)
 
 			if idle || promptFound {

@@ -53,16 +53,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 		if !os.IsNotExist(err) {
 			return fmt.Errorf("loading config: %w", err)
 		}
-		cfg = &config.Config{
-			Prefix:   "#",
-			LogLevel: "warn",
-			LogFile:  "./im2code.log",
-			Tmux: config.TmuxConfig{
-				IdleTimeout:    "2s",
-				MaxOutputLines: 50,
-				PromptPatterns: []string{`[$#>]\s*$`, `>>>\s*$`},
-			},
-		}
+		cfg = config.Defaults()
 	}
 
 	if err := setupLogging(cfg.LogLevel, cfg.LogFile); err != nil {
@@ -84,6 +75,12 @@ func runStart(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("creating data dir: %w", err)
 	}
 
+	// Write back the merged config so any fields that were absent (or the file
+	// itself if it did not exist) are initialised with their default values.
+	if err := config.Save(configPath(), cfg); err != nil {
+		slog.Warn("could not persist config defaults", "err", err)
+	}
+
 	subs, err := state.NewSubscriptions(dataDir + "/subscriptions.json")
 	if err != nil {
 		return fmt.Errorf("loading subscriptions: %w", err)
@@ -93,6 +90,9 @@ func runStart(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		idleTimeout = 2 * time.Second
 	}
+
+	watchTimeMin := parseClamped(cfg.Tmux.WatchTimeMin, 5*time.Second, time.Second, 30*time.Second)
+	watchTimeMax := parseClamped(cfg.Tmux.WatchTimeMax, 20*time.Second, 5*time.Second, 3600*time.Second)
 
 	bridge := tmux.New()
 	promptMatcher := tmux.NewPromptMatcher(cfg.Tmux.PromptPatterns)
@@ -192,7 +192,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		watchSubscriptions(ctx, rtr, bridge, idleTimeout, cfg.Tmux.MaxOutputLines, promptMatcher, outbound)
+		watchSubscriptions(ctx, rtr, bridge, idleTimeout, watchTimeMin, watchTimeMax, cfg.Tmux.MaxOutputLines, promptMatcher, outbound)
 	}()
 
 	slog.Info("im2code started", "prefix", prefix)
@@ -209,6 +209,8 @@ func watchSubscriptions(
 	rtr *router.Router,
 	bridge *tmux.Bridge,
 	timeout time.Duration,
+	watchMin time.Duration,
+	watchMax time.Duration,
 	maxLines int,
 	pm *tmux.PromptMatcher,
 	outbound chan<- channel.OutboundMessage,
@@ -279,7 +281,7 @@ func watchSubscriptions(
 					}
 				}
 
-				det := tmux.NewIdleDetector(bridge, s, timeout, maxLines, pm, onIdle)
+				det := tmux.NewIdleDetector(bridge, s, watchMin, watchMax, maxLines, pm, onIdle)
 				go det.Run(detCtx)
 				slog.Info("watch: started idle detector", "session", s)
 			}
@@ -318,4 +320,20 @@ func setupLogging(level, logFile string) error {
 
 	slog.SetDefault(slog.New(slog.NewTextHandler(f, &slog.HandlerOptions{Level: lvl})))
 	return nil
+}
+
+// parseClamped parses a duration string and clamps it to [min, max].
+// Falls back to def if the string is empty or unparseable.
+func parseClamped(s string, def, min, max time.Duration) time.Duration {
+	d, err := time.ParseDuration(s)
+	if err != nil || d == 0 {
+		d = def
+	}
+	if d < min {
+		d = min
+	}
+	if d > max {
+		d = max
+	}
+	return d
 }
