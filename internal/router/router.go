@@ -2,7 +2,9 @@ package router
 
 import (
 	"fmt"
+	"log/slog"
 	"strings"
+	"sync"
 
 	"github.com/dfbb/im2code/internal/channel"
 	"github.com/dfbb/im2code/internal/state"
@@ -26,6 +28,7 @@ type Router struct {
 	bridge   *tmux.Bridge
 	outbound chan<- channel.OutboundMessage
 	watching map[string]bool
+	mu       sync.RWMutex
 }
 
 func New(prefix string, subs *state.Subscriptions, bridge *tmux.Bridge, outbound chan<- channel.OutboundMessage) *Router {
@@ -39,10 +42,15 @@ func New(prefix string, subs *state.Subscriptions, bridge *tmux.Bridge, outbound
 }
 
 func (r *Router) reply(msg channel.InboundMessage, text string) {
-	r.outbound <- channel.OutboundMessage{
+	out := channel.OutboundMessage{
 		Channel: msg.Channel,
 		ChatID:  msg.ChatID,
 		Text:    text,
+	}
+	select {
+	case r.outbound <- out:
+	default:
+		slog.Warn("router: outbound full, dropping reply", "channel", msg.Channel, "chatID", msg.ChatID)
 	}
 }
 
@@ -110,6 +118,8 @@ func (r *Router) handleCommand(msg channel.InboundMessage) {
 
 	case "detach":
 		r.subs.Delete(key)
+		r.mu.Lock()
+		defer r.mu.Unlock()
 		r.watching[key] = false
 		r.reply(msg, "Detached.")
 
@@ -119,6 +129,8 @@ func (r *Router) handleCommand(msg channel.InboundMessage) {
 			r.reply(msg, "Not attached to any session.")
 			return
 		}
+		r.mu.RLock()
+		defer r.mu.RUnlock()
 		watch := r.watching[key]
 		r.reply(msg, fmt.Sprintf("Session: %s\nWatch: %v", session, watch))
 
@@ -146,9 +158,13 @@ func (r *Router) handleCommand(msg channel.InboundMessage) {
 		}
 		switch strings.ToLower(args[0]) {
 		case "on":
+			r.mu.Lock()
+			defer r.mu.Unlock()
 			r.watching[key] = true
 			r.reply(msg, "Watch mode enabled.")
 		case "off":
+			r.mu.Lock()
+			defer r.mu.Unlock()
 			r.watching[key] = false
 			r.reply(msg, "Watch mode disabled.")
 		default:
@@ -182,9 +198,29 @@ func (r *Router) helpText() string {
 	return strings.ReplaceAll(helpText, "{P}", r.prefix)
 }
 
+// WatchedChats returns a snapshot of {chatKey: session} for all currently watched chats.
+// Called by watchSubscriptions to manage idle detectors.
+func (r *Router) WatchedChats() map[string]string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	result := make(map[string]string)
+	for key, watching := range r.watching {
+		if watching {
+			if session, ok := r.subs.Get(key); ok {
+				result[key] = session
+			}
+		}
+	}
+	return result
+}
+
 func toTmuxKey(key string) string {
-	key = strings.ToLower(key)
-	key = strings.ReplaceAll(key, "ctrl-", "C-")
-	key = strings.ReplaceAll(key, "alt-", "M-")
-	return key
+	lower := strings.ToLower(key)
+	if strings.HasPrefix(lower, "ctrl-") {
+		return "C-" + strings.ToLower(key[5:])
+	}
+	if strings.HasPrefix(lower, "alt-") {
+		return "M-" + strings.ToLower(key[4:])
+	}
+	return key // pass through as-is: Enter, Tab, Escape, etc.
 }
