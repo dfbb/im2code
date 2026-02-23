@@ -161,7 +161,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 	}
 	defer hist.Close()
 
-	rtr := router.New(prefix, subs, bridge, outbound, onActivate, hist)
+	rtr := router.New(prefix, subs, bridge, outbound, onActivate, hist, promptMatcher, watchTimeMin, cfg.Tmux.MaxOutputLines)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

@@ -1,10 +1,12 @@
 package router
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/dfbb/im2code/internal/channel"
 	"github.com/dfbb/im2code/internal/state"
@@ -28,28 +30,44 @@ type CommandHistory interface {
 
 // Router dispatches inbound IM messages: prefix-commands → bridge handlers, others → tmux.
 type Router struct {
-	prefix     string
-	subs       *state.Subscriptions
-	bridge     *tmux.Bridge
-	outbound   chan<- channel.OutboundMessage
-	onActivate func(ch, senderID string) // called when a channel is first activated
-	history    CommandHistory
-	watching   map[string]bool
-	mu         sync.RWMutex
-	activated  map[string]string // channel name → locked senderID
-	activeMu   sync.Mutex
+	prefix        string
+	subs          *state.Subscriptions
+	bridge        *tmux.Bridge
+	outbound      chan<- channel.OutboundMessage
+	onActivate    func(ch, senderID string) // called when a channel is first activated
+	history       CommandHistory
+	promptMatcher *tmux.PromptMatcher
+	watchMin      time.Duration // cooldown / stability window for post-command snap
+	maxLines      int
+	watching      map[string]bool
+	mu            sync.RWMutex
+	activated     map[string]string // channel name → locked senderID
+	activeMu      sync.Mutex
 }
 
-func New(prefix string, subs *state.Subscriptions, bridge *tmux.Bridge, outbound chan<- channel.OutboundMessage, onActivate func(ch, senderID string), hist CommandHistory) *Router {
+func New(
+	prefix string,
+	subs *state.Subscriptions,
+	bridge *tmux.Bridge,
+	outbound chan<- channel.OutboundMessage,
+	onActivate func(ch, senderID string),
+	hist CommandHistory,
+	promptMatcher *tmux.PromptMatcher,
+	watchMin time.Duration,
+	maxLines int,
+) *Router {
 	return &Router{
-		prefix:     prefix,
-		subs:       subs,
-		bridge:     bridge,
-		outbound:   outbound,
-		onActivate: onActivate,
-		history:    hist,
-		watching:   make(map[string]bool),
-		activated:  make(map[string]string),
+		prefix:        prefix,
+		subs:          subs,
+		bridge:        bridge,
+		outbound:      outbound,
+		onActivate:    onActivate,
+		history:       hist,
+		promptMatcher: promptMatcher,
+		watchMin:      watchMin,
+		maxLines:      maxLines,
+		watching:      make(map[string]bool),
+		activated:     make(map[string]string),
 	}
 }
 
@@ -151,6 +169,78 @@ func (r *Router) Handle(msg channel.InboundMessage) {
 	}
 	if err := r.bridge.SendKeys(session, msg.Text); err != nil {
 		r.reply(msg, fmt.Sprintf("Error sending to tmux: %v", err))
+		return
+	}
+
+	// When #watch on is active the idle detector already handles output push.
+	// Otherwise fire a one-shot snap so the user sees the command result.
+	r.mu.RLock()
+	isWatching := r.watching[key]
+	r.mu.RUnlock()
+	if !isWatching {
+		go r.snapAfterCommand(msg, session)
+	}
+}
+
+// snapAfterCommand polls the tmux pane until it settles after a command was
+// sent, then pushes one snapshot back to the originating chat.
+func (r *Router) snapAfterCommand(msg channel.InboundMessage, session string) {
+	if r.bridge == nil {
+		return
+	}
+	minInterval := r.watchMin
+	if minInterval <= 0 {
+		minInterval = 5 * time.Second
+	}
+	maxLines := r.maxLines
+	if maxLines <= 0 {
+		maxLines = 50
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	var lastContent string
+	var lastChange time.Time
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(100 * time.Millisecond):
+		}
+
+		content, err := r.bridge.Capture(session, maxLines)
+		if err != nil {
+			continue
+		}
+
+		if content != lastContent {
+			lastContent = content
+			lastChange = time.Now()
+			continue
+		}
+
+		if lastChange.IsZero() {
+			continue
+		}
+
+		promptFound := r.promptMatcher != nil && r.promptMatcher.Match(content)
+		stable := time.Since(lastChange) > minInterval
+
+		if promptFound || stable {
+			out := channel.OutboundMessage{
+				Channel: msg.Channel,
+				ChatID:  msg.ChatID,
+				Text:    "```\n" + content + "\n```",
+			}
+			select {
+			case r.outbound <- out:
+			default:
+				slog.Warn("router: outbound full, dropping post-command snap", "chatID", msg.ChatID)
+			}
+			return
+		}
 	}
 }
 
