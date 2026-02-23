@@ -2,8 +2,11 @@ package dingtalk
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net/http"
+	"strings"
 
 	"github.com/open-dingtalk/dingtalk-stream-sdk-go/chatbot"
 	"github.com/open-dingtalk/dingtalk-stream-sdk-go/client"
@@ -95,4 +98,31 @@ func (c *Channel) Stop() error {
 func (c *Channel) Send(msg channel.OutboundMessage) error {
 	slog.Warn("dingtalk: Send not implemented; requires per-message session webhook", "chatID", msg.ChatID)
 	return fmt.Errorf("dingtalk: Send not implemented")
+}
+
+// CheckToken verifies the client credentials by fetching an OAuth2 access token.
+func CheckToken(clientID, clientSecret string) (string, error) {
+	body := fmt.Sprintf(`{"clientId":%q,"clientSecret":%q,"grantType":"client_credentials"}`, clientID, clientSecret)
+	resp, err := http.Post(
+		"https://api.dingtalk.com/v1.0/oauth2/accessToken",
+		"application/json",
+		strings.NewReader(body),
+	)
+	if err != nil {
+		return "", fmt.Errorf("dingtalk: %w", err)
+	}
+	defer resp.Body.Close()
+	var r struct {
+		AccessToken string `json:"accessToken"`
+		ErrCode     string `json:"code"`
+		ErrMsg      string `json:"message"`
+	}
+	json.NewDecoder(resp.Body).Decode(&r)
+	if r.AccessToken == "" {
+		if r.ErrMsg != "" {
+			return "", fmt.Errorf("dingtalk: %s", r.ErrMsg)
+		}
+		return "", fmt.Errorf("dingtalk: no access token in response (status %d)", resp.StatusCode)
+	}
+	return "client_id=" + clientID, nil
 }

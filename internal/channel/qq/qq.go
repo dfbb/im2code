@@ -157,6 +157,18 @@ func (c *Channel) addSeen(msgID string) bool {
 	return true
 }
 
+// CheckToken verifies the app credentials by fetching an access token.
+func CheckToken(appID, secret string) (string, error) {
+	ts := token.NewQQBotTokenSource(&token.QQBotCredentials{
+		AppID:     appID,
+		AppSecret: secret,
+	})
+	if _, err := ts.Token(); err != nil {
+		return "", fmt.Errorf("qq: %w", err)
+	}
+	return "app_id=" + appID, nil
+}
+
 func splitMessage(text string, max int) []string {
 	if len(text) <= max {
 		return []string{text}

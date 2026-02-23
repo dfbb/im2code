@@ -9,6 +9,13 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 	"gopkg.in/yaml.v3"
+
+	"github.com/dfbb/im2code/internal/channel/dingtalk"
+	"github.com/dfbb/im2code/internal/channel/discord"
+	feishuch "github.com/dfbb/im2code/internal/channel/feishu"
+	qqch "github.com/dfbb/im2code/internal/channel/qq"
+	slackch "github.com/dfbb/im2code/internal/channel/slack"
+	"github.com/dfbb/im2code/internal/channel/telegram"
 )
 
 var loginCmd = &cobra.Command{
@@ -44,14 +51,26 @@ func runLogin(cmd *cobra.Command, args []string) error {
 
 func loginToken(cfgPath, chName, label string) error {
 	fmt.Printf("%s %s: ", chName, label)
-	token, err := readSecret()
+	tok, err := readSecret()
 	if err != nil {
 		return err
 	}
+	fmt.Print("Verifying... ")
+	var identity string
+	switch chName {
+	case "telegram":
+		identity, err = telegram.CheckToken(tok)
+	case "discord":
+		identity, err = discord.CheckToken(tok)
+	}
+	if err != nil {
+		return fmt.Errorf("login failed: %w", err)
+	}
+	fmt.Printf("OK (%s)\n", identity)
 	return saveConfig(cfgPath, func(raw map[string]any) {
 		channels := getOrCreateMap(raw, "channels")
 		ch := getOrCreateMap(channels, chName)
-		ch["token"] = token
+		ch["token"] = tok
 	})
 }
 
@@ -60,6 +79,12 @@ func loginSlack(cfgPath string) error {
 	botToken, _ := readSecret()
 	fmt.Print("App Token (xapp-...): ")
 	appToken, _ := readSecret()
+	fmt.Print("Verifying... ")
+	identity, err := slackch.CheckToken(botToken)
+	if err != nil {
+		return fmt.Errorf("login failed: %w", err)
+	}
+	fmt.Printf("OK (%s)\n", identity)
 	return saveConfig(cfgPath, func(raw map[string]any) {
 		channels := getOrCreateMap(raw, "channels")
 		ch := getOrCreateMap(channels, "slack")
@@ -73,6 +98,12 @@ func loginFeishu(cfgPath string) error {
 	appID, _ := readLine()
 	fmt.Print("App Secret: ")
 	appSecret, _ := readSecret()
+	fmt.Print("Verifying... ")
+	identity, err := feishuch.CheckToken(appID, appSecret)
+	if err != nil {
+		return fmt.Errorf("login failed: %w", err)
+	}
+	fmt.Printf("OK (%s)\n", identity)
 	return saveConfig(cfgPath, func(raw map[string]any) {
 		channels := getOrCreateMap(raw, "channels")
 		ch := getOrCreateMap(channels, "feishu")
@@ -86,6 +117,12 @@ func loginDingTalk(cfgPath string) error {
 	clientID, _ := readLine()
 	fmt.Print("Client Secret: ")
 	clientSecret, _ := readSecret()
+	fmt.Print("Verifying... ")
+	identity, err := dingtalk.CheckToken(clientID, clientSecret)
+	if err != nil {
+		return fmt.Errorf("login failed: %w", err)
+	}
+	fmt.Printf("OK (%s)\n", identity)
 	return saveConfig(cfgPath, func(raw map[string]any) {
 		channels := getOrCreateMap(raw, "channels")
 		ch := getOrCreateMap(channels, "dingtalk")
@@ -99,6 +136,12 @@ func loginQQ(cfgPath string) error {
 	appID, _ := readLine()
 	fmt.Print("Secret: ")
 	secret, _ := readSecret()
+	fmt.Print("Verifying... ")
+	identity, err := qqch.CheckToken(appID, secret)
+	if err != nil {
+		return fmt.Errorf("login failed: %w", err)
+	}
+	fmt.Printf("OK (%s)\n", identity)
 	return saveConfig(cfgPath, func(raw map[string]any) {
 		channels := getOrCreateMap(raw, "channels")
 		ch := getOrCreateMap(channels, "qq")

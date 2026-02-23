@@ -14,6 +14,7 @@ import (
 	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
 	waLog "go.mau.fi/whatsmeow/util/log"
+	"github.com/mdp/qrterminal/v3"
 	_ "modernc.org/sqlite"
 	"google.golang.org/protobuf/proto"
 
@@ -187,5 +188,5 @@ func splitMessage(text string, maxLen int) []string {
 }
 
 func printQR(code string) {
-	fmt.Fprintf(os.Stderr, "\nWhatsApp pairing QR payload (paste at https://qr.io to scan):\n%s\n\n", code)
+	qrterminal.GenerateHalfBlock(code, qrterminal.L, os.Stderr)
 }

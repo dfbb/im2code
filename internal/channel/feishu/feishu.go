@@ -152,6 +152,31 @@ func (c *Channel) Send(msg channel.OutboundMessage) error {
 	return nil
 }
 
+// CheckToken verifies the app credentials by fetching a tenant access token.
+func CheckToken(appID, appSecret string) (string, error) {
+	payload := fmt.Sprintf(`{"app_id":%q,"app_secret":%q}`, appID, appSecret)
+	resp, err := lark.NewClient(appID, appSecret).Post(
+		context.Background(),
+		"/open-apis/auth/v3/tenant_access_token/internal",
+		strings.NewReader(payload),
+		larkcore.AccessTokenTypeNone,
+	)
+	if err != nil {
+		return "", fmt.Errorf("feishu: %w", err)
+	}
+	var r struct {
+		Code int    `json:"code"`
+		Msg  string `json:"msg"`
+	}
+	if err := json.Unmarshal(resp.RawBody, &r); err != nil {
+		return "", fmt.Errorf("feishu: decode response: %w", err)
+	}
+	if r.Code != 0 {
+		return "", fmt.Errorf("feishu: %s (code %d)", r.Msg, r.Code)
+	}
+	return "app_id=" + appID, nil
+}
+
 func splitMessage(text string, maxLen int) []string {
 	if len(text) <= maxLen {
 		return []string{text}
