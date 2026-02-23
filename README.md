@@ -142,13 +142,15 @@ Open [@BotFather](https://t.me/BotFather) in Telegram, send `/newbot`, and follo
 im2code login telegram
 ```
 
-**3. Find your Chat ID**
+**3. Start the daemon and send a message**
 
-Send any message to the bot after starting the daemon; the Chat ID is printed in the logs. Alternatively use `@userinfobot`.
+```bash
+im2code start
+```
 
-**4. Restrict access (recommended)**
+Send any message to the bot. The first sender's user ID is automatically saved to `allow_from` in `~/.im2code/config.yaml`, and all subsequent messages from other users are ignored. No manual configuration needed.
 
-Set `allow_from` in the config file (see the config reference below) to a list of chat IDs. Messages from unlisted users are silently ignored.
+To allow additional users, add their IDs to `allow_from` in the config file manually.
 
 ---
 

@@ -106,7 +106,20 @@ func runStart(cmd *cobra.Command, args []string) error {
 	}
 
 	if enabled("telegram") && cfg.Channels.Telegram.Token != "" {
-		mgr.Register(telegram.New(cfg.Channels.Telegram.Token, cfg.Channels.Telegram.AllowFrom, inbound))
+		cfgFile := configPath()
+		onFirstUser := func(senderID string) {
+			err := updateConfig(cfgFile, func(raw map[string]any) {
+				ch := getOrCreateMap(getOrCreateMap(raw, "channels"), "telegram")
+				existing, _ := ch["allow_from"].([]any)
+				ch["allow_from"] = append(existing, senderID)
+			})
+			if err != nil {
+				slog.Error("telegram: failed to persist first user to config", "err", err)
+			} else {
+				slog.Info("telegram: first user saved to config", "senderID", senderID, "config", cfgFile)
+			}
+		}
+		mgr.Register(telegram.New(cfg.Channels.Telegram.Token, cfg.Channels.Telegram.AllowFrom, onFirstUser, inbound))
 	}
 	if enabled("discord") && cfg.Channels.Discord.Token != "" {
 		mgr.Register(discord.New(cfg.Channels.Discord.Token, cfg.Channels.Discord.AllowFrom, inbound))
