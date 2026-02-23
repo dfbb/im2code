@@ -59,7 +59,7 @@ func (c *Channel) Start(ctx context.Context) error {
 		case <-ctx.Done():
 			return nil
 		case <-time.After(5 * time.Second):
-			slog.Info("discord reconnecting...")
+			slog.Debug("discord reconnecting...")
 		}
 	}
 }

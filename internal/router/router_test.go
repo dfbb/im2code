@@ -17,7 +17,7 @@ func newTestRouter(t *testing.T) (*router.Router, chan channel.OutboundMessage) 
 
 	subs, _ := state.NewSubscriptions(f.Name())
 	outbound := make(chan channel.OutboundMessage, 10)
-	r := router.New("#", subs, nil, outbound)
+	r := router.New("#", subs, nil, outbound, func(ch, senderID string) {})
 	return r, outbound
 }
 
@@ -26,7 +26,7 @@ func TestRoute_NoSession(t *testing.T) {
 
 	r.Handle(channel.InboundMessage{
 		Channel: "telegram", ChatID: "123", SenderID: "u1",
-		Text: "hello",
+		Text: "hello", PreAuthorized: true,
 	})
 
 	msg := <-outbound
@@ -43,7 +43,7 @@ func TestRoute_HashHelp(t *testing.T) {
 
 	r.Handle(channel.InboundMessage{
 		Channel: "telegram", ChatID: "123", SenderID: "u1",
-		Text: "#help",
+		Text: "#help", PreAuthorized: true,
 	})
 
 	msg := <-outbound
@@ -60,7 +60,7 @@ func TestRoute_AttachStatus(t *testing.T) {
 
 	// Attach to a session
 	r.Handle(channel.InboundMessage{
-		Channel: "telegram", ChatID: "123", Text: "#attach mysession",
+		Channel: "telegram", ChatID: "123", Text: "#attach mysession", PreAuthorized: true,
 	})
 	msg := <-outbound
 	if msg.Text == "" {
@@ -69,7 +69,7 @@ func TestRoute_AttachStatus(t *testing.T) {
 
 	// Check status
 	r.Handle(channel.InboundMessage{
-		Channel: "telegram", ChatID: "123", Text: "#status",
+		Channel: "telegram", ChatID: "123", Text: "#status", PreAuthorized: true,
 	})
 	msg = <-outbound
 	if msg.Text == "" {
@@ -81,12 +81,12 @@ func TestRoute_Detach(t *testing.T) {
 	r, outbound := newTestRouter(t)
 
 	r.Handle(channel.InboundMessage{
-		Channel: "telegram", ChatID: "123", Text: "#attach mysession",
+		Channel: "telegram", ChatID: "123", Text: "#attach mysession", PreAuthorized: true,
 	})
 	<-outbound // consume attach reply
 
 	r.Handle(channel.InboundMessage{
-		Channel: "telegram", ChatID: "123", Text: "#detach",
+		Channel: "telegram", ChatID: "123", Text: "#detach", PreAuthorized: true,
 	})
 	msg := <-outbound
 	if msg.Text == "" {
@@ -101,10 +101,10 @@ func TestRoute_CustomPrefix(t *testing.T) {
 
 	subs, _ := state.NewSubscriptions(f.Name())
 	outbound := make(chan channel.OutboundMessage, 10)
-	r := router.New("!", subs, nil, outbound)
+	r := router.New("!", subs, nil, outbound, func(ch, senderID string) {})
 
 	r.Handle(channel.InboundMessage{
-		Channel: "telegram", ChatID: "123", Text: "!help",
+		Channel: "telegram", ChatID: "123", Text: "!help", PreAuthorized: true,
 	})
 	msg := <-outbound
 	if msg.Text == "" {
@@ -116,7 +116,7 @@ func TestRoute_UnknownCommand(t *testing.T) {
 	r, outbound := newTestRouter(t)
 
 	r.Handle(channel.InboundMessage{
-		Channel: "telegram", ChatID: "123", Text: "#foobar",
+		Channel: "telegram", ChatID: "123", Text: "#foobar", PreAuthorized: true,
 	})
 	msg := <-outbound
 	if msg.Text == "" {

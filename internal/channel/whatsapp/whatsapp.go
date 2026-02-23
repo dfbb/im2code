@@ -23,21 +23,25 @@ import (
 
 type Channel struct {
 	sessionDir string
+	logLevel   string
 	allowFrom  map[string]bool
 	inbound    chan<- channel.InboundMessage
 	client     *whatsmeow.Client
 }
 
-func New(sessionDir string, allowFrom []string, inbound chan<- channel.InboundMessage) *Channel {
+func New(sessionDir string, allowFrom []string, logLevel string, inbound chan<- channel.InboundMessage) *Channel {
 	if sessionDir == "" {
 		home, _ := os.UserHomeDir()
 		sessionDir = home + "/.im2code/whatsapp"
+	}
+	if logLevel == "" {
+		logLevel = "WARN"
 	}
 	allow := make(map[string]bool)
 	for _, id := range allowFrom {
 		allow[id] = true
 	}
-	return &Channel{sessionDir: sessionDir, allowFrom: allow, inbound: inbound}
+	return &Channel{sessionDir: sessionDir, logLevel: strings.ToUpper(logLevel), allowFrom: allow, inbound: inbound}
 }
 
 func (c *Channel) Name() string { return "whatsapp" }
@@ -64,8 +68,7 @@ func (c *Channel) Start(ctx context.Context) error {
 		return fmt.Errorf("whatsapp device: %w", err)
 	}
 
-	// Fix #7: pass a real logger instead of nil so library errors are visible.
-	c.client = whatsmeow.NewClient(deviceStore, waLog.Stdout("whatsapp", "INFO", true))
+	c.client = whatsmeow.NewClient(deviceStore, waLog.Stdout("whatsapp", c.logLevel, true))
 	c.client.AddEventHandler(c.eventHandler)
 
 	if c.client.Store.ID == nil {
@@ -102,7 +105,7 @@ func (c *Channel) Start(ctx context.Context) error {
 func (c *Channel) eventHandler(evt interface{}) {
 	switch v := evt.(type) {
 	case *events.Message:
-		slog.Info("whatsapp: raw event",
+		slog.Debug("whatsapp: raw event",
 			"type", v.Info.Type,
 			"from", v.Info.Sender,
 			"chat", v.Info.Chat,
@@ -120,10 +123,10 @@ func (c *Channel) eventHandler(evt interface{}) {
 		// have IsFromMe=true but a different Device number — those must be processed.
 		if v.Info.IsFromMe {
 			if c.client.Store.ID != nil && v.Info.Sender.Device == c.client.Store.ID.Device {
-				slog.Info("whatsapp: skipping own echo", "device", v.Info.Sender.Device)
+				slog.Debug("whatsapp: skipping own echo", "device", v.Info.Sender.Device)
 				return
 			}
-			slog.Info("whatsapp: allowing IsFromMe from other device", "senderDevice", v.Info.Sender.Device)
+			slog.Debug("whatsapp: allowing IsFromMe from other device", "senderDevice", v.Info.Sender.Device)
 		}
 
 		// Skip non-text events (receipts, stickers, system messages).
@@ -133,21 +136,21 @@ func (c *Channel) eventHandler(evt interface{}) {
 		} else if v.Message.GetExtendedTextMessage() != nil {
 			text = v.Message.GetExtendedTextMessage().GetText()
 		}
-		slog.Info("whatsapp: extracted text", "text", text, "len", len(text))
+		slog.Debug("whatsapp: extracted text", "text", text, "len", len(text))
 		if text == "" {
-			slog.Info("whatsapp: skipping (no text)")
+			slog.Debug("whatsapp: skipping (no text)")
 			return
 		}
 
 		// Strip device suffix (number:3@s.whatsapp.net → number@s.whatsapp.net)
 		// so the same person is recognised across all their devices.
 		senderID := v.Info.Sender.ToNonAD().String()
-		slog.Info("whatsapp: senderID", "senderID", senderID, "allowFrom", c.allowFrom)
+		slog.Debug("whatsapp: senderID", "senderID", senderID, "allowFrom", c.allowFrom)
 
 		preAuthorized := false
 		if len(c.allowFrom) > 0 {
 			if !c.allowFrom[senderID] {
-				slog.Info("whatsapp: skipping (not in allowFrom)")
+				slog.Debug("whatsapp: skipping (not in allowFrom)")
 				return
 			}
 			preAuthorized = true
@@ -160,7 +163,7 @@ func (c *Channel) eventHandler(evt interface{}) {
 			Text:          text,
 			PreAuthorized: preAuthorized,
 		}
-		slog.Info("whatsapp: sending to inbound", "chatID", msg.ChatID, "preAuthorized", preAuthorized)
+		slog.Debug("whatsapp: sending to inbound", "chatID", msg.ChatID, "preAuthorized", preAuthorized)
 		select {
 		case c.inbound <- msg:
 		default:

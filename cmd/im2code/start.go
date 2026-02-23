@@ -124,7 +124,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 	// WhatsApp has no token-based credential: its first-run flow presents a QR
 	// code on stderr for pairing. Always include it when the channel is enabled.
 	if enabled("whatsapp") {
-		mgr.Register(whatsapp.New(cfg.Channels.WhatsApp.SessionDir, cfg.Channels.WhatsApp.AllowFrom, inbound))
+		mgr.Register(whatsapp.New(cfg.Channels.WhatsApp.SessionDir, cfg.Channels.WhatsApp.AllowFrom, cfg.LogLevel, inbound))
 	}
 	if enabled("feishu") && cfg.Channels.Feishu.AppID != "" {
 		mgr.Register(feishu.New(cfg.Channels.Feishu.AppID, cfg.Channels.Feishu.AppSecret, nil, inbound))

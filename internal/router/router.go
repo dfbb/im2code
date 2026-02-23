@@ -65,7 +65,7 @@ func chatKey(msg channel.InboundMessage) string {
 
 // Handle dispatches a message: bridge command or tmux forward.
 func (r *Router) Handle(msg channel.InboundMessage) {
-	slog.Info("router: handle",
+	slog.Debug("router: handle",
 		"channel", msg.Channel,
 		"senderID", msg.SenderID,
 		"chatID", msg.ChatID,
@@ -79,7 +79,7 @@ func (r *Router) Handle(msg channel.InboundMessage) {
 		activationCmd := r.prefix + "im2code"
 		trimmed := strings.TrimSpace(msg.Text)
 
-		slog.Info("router: activation gate",
+		slog.Debug("router: activation gate",
 			"channel", msg.Channel,
 			"activationCmd", activationCmd,
 			"trimmedText", trimmed,
@@ -90,7 +90,7 @@ func (r *Router) Handle(msg channel.InboundMessage) {
 		lockedSender := r.activated[msg.Channel]
 		r.activeMu.Unlock()
 
-		slog.Info("router: activated state", "channel", msg.Channel, "lockedSender", lockedSender)
+		slog.Debug("router: activated state", "channel", msg.Channel, "lockedSender", lockedSender)
 
 		if lockedSender == "" {
 			// Channel not yet activated.
@@ -109,7 +109,7 @@ func (r *Router) Handle(msg channel.InboundMessage) {
 		}
 
 		if lockedSender != msg.SenderID {
-			slog.Info("router: wrong sender, ignoring", "lockedSender", lockedSender, "got", msg.SenderID)
+			slog.Debug("router: wrong sender, ignoring", "lockedSender", lockedSender, "got", msg.SenderID)
 			return
 		}
 	}
