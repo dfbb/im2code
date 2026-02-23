@@ -48,8 +48,12 @@ func (c *Channel) Start(ctx context.Context) error {
 		return fmt.Errorf("whatsapp: create session dir: %w", err)
 	}
 
-	// Use file DSN with foreign keys enabled (required by sqlstore)
-	dsn := "file:" + c.sessionDir + "/session.db?_pragma=foreign_keys(on)"
+	// WAL mode allows concurrent reads alongside writes (prevents SQLITE_BUSY).
+	// busy_timeout retries for up to 5 s instead of immediately returning BUSY.
+	dsn := "file:" + c.sessionDir + "/session.db" +
+		"?_pragma=foreign_keys(on)" +
+		"&_pragma=journal_mode(WAL)" +
+		"&_pragma=busy_timeout(5000)"
 	container, err := sqlstore.New(ctx, "sqlite", dsn, nil)
 	if err != nil {
 		return fmt.Errorf("whatsapp store: %w", err)
