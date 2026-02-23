@@ -45,7 +45,8 @@ type SlackConfig struct {
 }
 
 type WhatsAppConfig struct {
-	SessionDir string `yaml:"session_dir"`
+	SessionDir string   `yaml:"session_dir"`
+	AllowFrom  []string `yaml:"allow_from"`
 }
 
 type FeishuConfig struct {

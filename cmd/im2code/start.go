@@ -130,7 +130,20 @@ func runStart(cmd *cobra.Command, args []string) error {
 	// WhatsApp has no token-based credential: its first-run flow presents a QR
 	// code on stderr for pairing. Always include it when the channel is enabled.
 	if enabled("whatsapp") {
-		mgr.Register(whatsapp.New(cfg.Channels.WhatsApp.SessionDir, nil, inbound))
+		cfgFile := configPath()
+		onFirstWAUser := func(senderID string) {
+			err := updateConfig(cfgFile, func(raw map[string]any) {
+				ch := getOrCreateMap(getOrCreateMap(raw, "channels"), "whatsapp")
+				existing, _ := ch["allow_from"].([]any)
+				ch["allow_from"] = append(existing, senderID)
+			})
+			if err != nil {
+				slog.Error("whatsapp: failed to persist first user to config", "err", err)
+			} else {
+				slog.Info("whatsapp: first user saved to config", "senderID", senderID, "config", cfgFile)
+			}
+		}
+		mgr.Register(whatsapp.New(cfg.Channels.WhatsApp.SessionDir, cfg.Channels.WhatsApp.AllowFrom, onFirstWAUser, inbound))
 	}
 	if enabled("feishu") && cfg.Channels.Feishu.AppID != "" {
 		mgr.Register(feishu.New(cfg.Channels.Feishu.AppID, cfg.Channels.Feishu.AppSecret, nil, inbound))
