@@ -77,11 +77,17 @@ func (c *Channel) handleInner(event slackevents.EventsAPIInnerEvent) {
 			}
 			preAuthorized = true
 		}
+		// Slack rejects messages starting with "/", so users must prefix with a
+		// space (e.g. " /command"). Strip that leading space here.
+		text := ev.Text
+		if strings.HasPrefix(text, " /") {
+			text = text[1:]
+		}
 		inMsg := channel.InboundMessage{
 			Channel:       "slack",
 			ChatID:        ev.Channel,
 			SenderID:      ev.User,
-			Text:          ev.Text,
+			Text:          text,
 			PreAuthorized: preAuthorized,
 		}
 		select {

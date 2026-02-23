@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"io"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -339,7 +340,8 @@ func setupLogging(level, logFile string) error {
 		lvl = slog.LevelInfo
 	}
 
-	slog.SetDefault(slog.New(slog.NewTextHandler(f, &slog.HandlerOptions{Level: lvl})))
+	w := io.MultiWriter(os.Stderr, f)
+	slog.SetDefault(slog.New(slog.NewTextHandler(w, &slog.HandlerOptions{Level: lvl})))
 	return nil
 }
 
