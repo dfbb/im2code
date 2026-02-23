@@ -107,11 +107,23 @@ func (c *Channel) eventHandler(evt interface{}) {
 			"from", v.Info.Sender,
 			"chat", v.Info.Chat,
 			"isFromMe", v.Info.IsFromMe,
+			"myDevice", func() uint16 {
+				if c.client.Store.ID != nil {
+					return c.client.Store.ID.Device
+				}
+				return 0
+			}(),
 		)
 
+		// Skip only messages sent by this device itself (echoes of our own replies).
+		// Messages from other devices of the same account (e.g. the user's phone)
+		// have IsFromMe=true but a different Device number — those must be processed.
 		if v.Info.IsFromMe {
-			slog.Info("whatsapp: skipping (IsFromMe)")
-			return
+			if c.client.Store.ID != nil && v.Info.Sender.Device == c.client.Store.ID.Device {
+				slog.Info("whatsapp: skipping own echo", "device", v.Info.Sender.Device)
+				return
+			}
+			slog.Info("whatsapp: allowing IsFromMe from other device", "senderDevice", v.Info.Sender.Device)
 		}
 
 		// Skip non-text events (receipts, stickers, system messages).
