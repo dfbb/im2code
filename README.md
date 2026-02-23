@@ -4,6 +4,12 @@ Bridge IM messages to tmux terminal sessions. Control your running code directly
 
 ## Supported Platforms
 
+| OS | Status |
+|----|--------|
+| macOS | :white_check_mark: Tested |
+| Linux | :x: Untested |
+| Windows | :grey_question: Unknown |
+
 | Platform | Status |
 |----------|--------|
 | Feishu / Lark | :white_check_mark: Tested |
