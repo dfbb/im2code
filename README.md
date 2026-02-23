@@ -286,7 +286,7 @@ Uses the [botgo](https://github.com/tencent-connect/botgo) SDK over WebSocket to
 
 **1. Create a bot**
 
-- Open the [QQ Bot Open Platform](https://q.qq.com/qqbot)
+- Open the [QQ Bot Open Platform](https://bot.q.qq.com/)
 - Register a developer account and create a bot app
 - Go to **Development → Basic Info** and copy the **AppID** and **AppSecret** (used as `secret`)
 - **Feature Config**: enable C2C (single-chat) message permission (`C2C_MESSAGE_CREATE` event)
