@@ -42,7 +42,7 @@ Requires Go 1.25+.
 ```bash
 git clone https://github.com/dfbb/im2code
 cd im2code
-go build -o im2code ./cmd/im2code
+go build -ldflags="-X main.Version=$(git describe --tags --always --dirty)" -o im2code ./cmd/im2code
 sudo mv im2code /usr/local/bin/
 ```
 
