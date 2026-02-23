@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -159,7 +160,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		watchSubscriptions(ctx, subs, bridge, idleTimeout, cfg.Tmux.MaxOutputLines, promptMatcher, outbound)
+		watchSubscriptions(ctx, rtr, bridge, idleTimeout, cfg.Tmux.MaxOutputLines, promptMatcher, outbound)
 	}()
 
 	slog.Info("im2code started", "prefix", prefix)
@@ -170,28 +171,86 @@ func runStart(cmd *cobra.Command, args []string) error {
 }
 
 // watchSubscriptions periodically checks which subscriptions have watch mode enabled
-// and runs idle detectors for them. For now it's a polling skeleton that can be
-// expanded once the Router exposes watch state.
+// and runs idle detectors for them.
 func watchSubscriptions(
 	ctx context.Context,
-	subs *state.Subscriptions,
+	rtr *router.Router,
 	bridge *tmux.Bridge,
 	timeout time.Duration,
 	maxLines int,
 	pm *tmux.PromptMatcher,
 	outbound chan<- channel.OutboundMessage,
 ) {
+	// maps session name → cancel func for its running IdleDetector
+	active := make(map[string]context.CancelFunc)
+
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
-			// TODO: cancel all active idle-detector goroutines here.
+			for _, cancel := range active {
+				cancel()
+			}
 			return
 		case <-ticker.C:
-			// TODO: query router watch state and start/stop IdleDetector
-			// goroutines per subscription. See internal/tmux/idle.go.
+			// Get current snapshot: chatKey → session for all watched chats
+			watched := rtr.WatchedChats() // map[chatKey]session
+
+			// Build set of sessions currently needed
+			needed := make(map[string]bool)
+			for _, session := range watched {
+				needed[session] = true
+			}
+
+			// Stop detectors for sessions no longer watched
+			for session, cancel := range active {
+				if !needed[session] {
+					cancel()
+					delete(active, session)
+				}
+			}
+
+			// Start detectors for newly watched sessions
+			for _, session := range watched {
+				if _, ok := active[session]; ok {
+					continue // already running
+				}
+				s := session // capture for closure
+				detCtx, cancel := context.WithCancel(ctx)
+				active[s] = cancel
+
+				onIdle := func(content string) {
+					// Re-query current watchers each time so new subscribers
+					// get output without restarting the detector.
+					current := rtr.WatchedChats()
+					for chatKey, sess := range current {
+						if sess != s {
+							continue
+						}
+						parts := strings.SplitN(chatKey, ":", 2)
+						if len(parts) != 2 {
+							continue
+						}
+						msg := channel.OutboundMessage{
+							Channel: parts[0],
+							ChatID:  parts[1],
+							Text:    "```\n" + content + "\n```",
+						}
+						select {
+						case outbound <- msg:
+						default:
+							slog.Warn("watchSubscriptions: outbound full, dropping capture",
+								"session", s)
+						}
+					}
+				}
+
+				det := tmux.NewIdleDetector(bridge, s, timeout, maxLines, pm, onIdle)
+				go det.Run(detCtx)
+				slog.Info("watch: started idle detector", "session", s)
+			}
 		}
 	}
 }
