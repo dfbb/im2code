@@ -42,8 +42,8 @@ func runCheck(cmd *cobra.Command, args []string) error {
 			func() (string, error) { return "configured", nil }},
 		{"dingtalk", func() bool { return cfg.Channels.DingTalk.ClientID != "" },
 			func() (string, error) { return "configured", nil }},
-		{"qq", func() bool { return cfg.Channels.QQ.AppID != "" },
-			func() (string, error) { return "configured", nil }},
+		{"qq", func() bool { return cfg.Channels.QQ.AppID != "" && cfg.Channels.QQ.Secret != "" },
+			func() (string, error) { return "configured (secret set)", nil }},
 	}
 
 	filter := ""

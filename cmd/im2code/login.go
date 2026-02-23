@@ -97,13 +97,13 @@ func loginDingTalk(cfgPath string) error {
 func loginQQ(cfgPath string) error {
 	fmt.Print("App ID: ")
 	appID, _ := readLine()
-	fmt.Print("Token: ")
-	token, _ := readSecret()
+	fmt.Print("Secret: ")
+	secret, _ := readSecret()
 	return updateConfig(cfgPath, func(raw map[string]any) {
 		channels := getOrCreateMap(raw, "channels")
 		ch := getOrCreateMap(channels, "qq")
 		ch["app_id"] = appID
-		ch["token"] = token
+		ch["secret"] = secret
 	})
 }
 

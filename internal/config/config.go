@@ -59,8 +59,9 @@ type DingTalkConfig struct {
 }
 
 type QQConfig struct {
-	AppID string `yaml:"app_id"`
-	Token string `yaml:"token"`
+	AppID     string   `yaml:"app_id"`
+	Secret    string   `yaml:"secret"`
+	AllowFrom []string `yaml:"allow_from"`
 }
 
 func defaults() *Config {

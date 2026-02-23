@@ -125,8 +125,8 @@ func runStart(cmd *cobra.Command, args []string) error {
 	if enabled("dingtalk") && cfg.Channels.DingTalk.ClientID != "" {
 		mgr.Register(dingtalk.New(cfg.Channels.DingTalk.ClientID, cfg.Channels.DingTalk.ClientSecret, nil, inbound))
 	}
-	if enabled("qq") && cfg.Channels.QQ.AppID != "" {
-		mgr.Register(qq.New(nil, inbound))
+	if enabled("qq") && cfg.Channels.QQ.AppID != "" && cfg.Channels.QQ.Secret != "" {
+		mgr.Register(qq.New(cfg.Channels.QQ.AppID, cfg.Channels.QQ.Secret, cfg.Channels.QQ.AllowFrom, inbound))
 	}
 
 	rtr := router.New(prefix, subs, bridge, outbound)
