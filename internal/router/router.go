@@ -21,6 +21,11 @@ const helpText = `Available commands:
   {P}key <key>         — send control key (e.g. ctrl-c)
   {P}help              — show this message`
 
+// CommandHistory records user inputs.
+type CommandHistory interface {
+	Record(channel, senderID, text string) error
+}
+
 // Router dispatches inbound IM messages: prefix-commands → bridge handlers, others → tmux.
 type Router struct {
 	prefix     string
@@ -28,21 +33,32 @@ type Router struct {
 	bridge     *tmux.Bridge
 	outbound   chan<- channel.OutboundMessage
 	onActivate func(ch, senderID string) // called when a channel is first activated
+	history    CommandHistory
 	watching   map[string]bool
 	mu         sync.RWMutex
 	activated  map[string]string // channel name → locked senderID
 	activeMu   sync.Mutex
 }
 
-func New(prefix string, subs *state.Subscriptions, bridge *tmux.Bridge, outbound chan<- channel.OutboundMessage, onActivate func(ch, senderID string)) *Router {
+func New(prefix string, subs *state.Subscriptions, bridge *tmux.Bridge, outbound chan<- channel.OutboundMessage, onActivate func(ch, senderID string), hist CommandHistory) *Router {
 	return &Router{
 		prefix:     prefix,
 		subs:       subs,
 		bridge:     bridge,
 		outbound:   outbound,
 		onActivate: onActivate,
+		history:    hist,
 		watching:   make(map[string]bool),
 		activated:  make(map[string]string),
+	}
+}
+
+func (r *Router) record(msg channel.InboundMessage) {
+	if r.history == nil {
+		return
+	}
+	if err := r.history.Record(msg.Channel, msg.SenderID, msg.Text); err != nil {
+		slog.Warn("history: record failed", "err", err)
 	}
 }
 
@@ -113,6 +129,9 @@ func (r *Router) Handle(msg channel.InboundMessage) {
 			return
 		}
 	}
+
+	// Record every authorized message (bridge commands and plain text alike).
+	r.record(msg)
 
 	if strings.HasPrefix(msg.Text, r.prefix) {
 		r.handleCommand(msg)

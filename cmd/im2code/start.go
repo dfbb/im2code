@@ -23,6 +23,7 @@ import (
 	"github.com/dfbb/im2code/internal/channel/telegram"
 	"github.com/dfbb/im2code/internal/channel/whatsapp"
 	"github.com/dfbb/im2code/internal/config"
+	"github.com/dfbb/im2code/internal/history"
 	"github.com/dfbb/im2code/internal/router"
 	"github.com/dfbb/im2code/internal/state"
 	"github.com/dfbb/im2code/internal/tmux"
@@ -150,7 +151,17 @@ func runStart(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	rtr := router.New(prefix, subs, bridge, outbound, onActivate)
+	histDBPath := cfg.CmdHistoryDB
+	if histDBPath == "" {
+		histDBPath = dataDir + "/cmd_history.db"
+	}
+	hist, err := history.New(histDBPath)
+	if err != nil {
+		return fmt.Errorf("opening command history db: %w", err)
+	}
+	defer hist.Close()
+
+	rtr := router.New(prefix, subs, bridge, outbound, onActivate, hist)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

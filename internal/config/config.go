@@ -7,11 +7,12 @@ import (
 )
 
 type Config struct {
-	Prefix   string         `yaml:"prefix"`
-	LogLevel string         `yaml:"loglevel"`
-	LogFile  string         `yaml:"logfile"`
-	Tmux     TmuxConfig     `yaml:"tmux"`
-	Channels ChannelConfigs `yaml:"channels"`
+	Prefix       string         `yaml:"prefix"`
+	LogLevel     string         `yaml:"loglevel"`
+	LogFile      string         `yaml:"logfile"`
+	CmdHistoryDB string         `yaml:"cmd_history_db"`
+	Tmux         TmuxConfig     `yaml:"tmux"`
+	Channels     ChannelConfigs `yaml:"channels"`
 }
 
 type TmuxConfig struct {

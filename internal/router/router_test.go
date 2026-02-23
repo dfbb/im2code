@@ -17,7 +17,7 @@ func newTestRouter(t *testing.T) (*router.Router, chan channel.OutboundMessage) 
 
 	subs, _ := state.NewSubscriptions(f.Name())
 	outbound := make(chan channel.OutboundMessage, 10)
-	r := router.New("#", subs, nil, outbound, func(ch, senderID string) {})
+	r := router.New("#", subs, nil, outbound, func(ch, senderID string) {}, nil)
 	return r, outbound
 }
 
@@ -101,7 +101,7 @@ func TestRoute_CustomPrefix(t *testing.T) {
 
 	subs, _ := state.NewSubscriptions(f.Name())
 	outbound := make(chan channel.OutboundMessage, 10)
-	r := router.New("!", subs, nil, outbound, func(ch, senderID string) {})
+	r := router.New("!", subs, nil, outbound, func(ch, senderID string) {}, nil)
 
 	r.Handle(channel.InboundMessage{
 		Channel: "telegram", ChatID: "123", Text: "!help", PreAuthorized: true,

@@ -220,3 +220,6 @@ docs/plans/
 
 # Runtime log
 im2code.log
+
+# Command history database
+cmd_history.db
