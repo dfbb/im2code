@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"sync"
 	"syscall"
@@ -51,9 +52,10 @@ func runStart(cmd *cobra.Command, args []string) error {
 		if !os.IsNotExist(err) {
 			return fmt.Errorf("loading config: %w", err)
 		}
-		slog.Info("no config file found, using defaults", "path", configPath())
 		cfg = &config.Config{
-			Prefix: "#",
+			Prefix:   "#",
+			LogLevel: "warn",
+			LogFile:  "./im2code.log",
 			Tmux: config.TmuxConfig{
 				IdleTimeout:    "2s",
 				MaxOutputLines: 50,
@@ -61,6 +63,11 @@ func runStart(cmd *cobra.Command, args []string) error {
 			},
 		}
 	}
+
+	if err := setupLogging(cfg.LogLevel, cfg.LogFile); err != nil {
+		return fmt.Errorf("setting up logging: %w", err)
+	}
+	slog.Info("im2code starting", "loglevel", cfg.LogLevel, "logfile", cfg.LogFile)
 
 	prefix := cfg.Prefix
 	if flagPrefix != "" {
@@ -267,4 +274,37 @@ func watchSubscriptions(
 			}
 		}
 	}
+}
+
+// setupLogging configures the default slog handler to write to logFile at the
+// given level. Relative paths are resolved relative to the executable's directory.
+func setupLogging(level, logFile string) error {
+	logPath := logFile
+	if !filepath.IsAbs(logPath) {
+		execPath, err := os.Executable()
+		if err != nil {
+			return fmt.Errorf("resolving executable path: %w", err)
+		}
+		logPath = filepath.Join(filepath.Dir(execPath), filepath.Base(logFile))
+	}
+
+	f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		return fmt.Errorf("opening log file %s: %w", logPath, err)
+	}
+
+	var lvl slog.Level
+	switch strings.ToLower(level) {
+	case "debug":
+		lvl = slog.LevelDebug
+	case "warn":
+		lvl = slog.LevelWarn
+	case "error":
+		lvl = slog.LevelError
+	default:
+		lvl = slog.LevelInfo
+	}
+
+	slog.SetDefault(slog.New(slog.NewTextHandler(f, &slog.HandlerOptions{Level: lvl})))
+	return nil
 }

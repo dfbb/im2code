@@ -8,6 +8,8 @@ import (
 
 type Config struct {
 	Prefix   string         `yaml:"prefix"`
+	LogLevel string         `yaml:"loglevel"`
+	LogFile  string         `yaml:"logfile"`
 	Tmux     TmuxConfig     `yaml:"tmux"`
 	Channels ChannelConfigs `yaml:"channels"`
 }
@@ -67,7 +69,9 @@ type QQConfig struct {
 
 func defaults() *Config {
 	return &Config{
-		Prefix: "#",
+		Prefix:   "#",
+		LogLevel: "warn",
+		LogFile:  "./im2code.log",
 		Tmux: TmuxConfig{
 			IdleTimeout:    "2s",
 			MaxOutputLines: 50,
