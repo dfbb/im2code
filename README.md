@@ -233,9 +233,8 @@ Pairing data is stored in `~/.im2code/whatsapp/` (configurable). Subsequent rest
 - **Create an in-house app**
 - Go to **Credentials & Basic Info** and copy the **App ID** and **App Secret**
 - **Permissions**: add `im:message` (receive) and `im:message:send_as_bot` (send)
-- **Event Subscriptions**: enable long-polling and subscribe to `im.message.receive_v1`
 
-**2. Configure**
+**2. Configure and establish first connection**
 
 ```bash
 im2code login feishu
@@ -243,7 +242,16 @@ im2code login feishu
 # App Secret:
 ```
 
-**3. Usage**
+This verifies your credentials, saves them, and automatically opens a brief WebSocket connection to Feishu. That first connection is required by Feishu before the long-connection option becomes available in the console.
+
+**3. Enable long-connection mode**
+
+After `im2code login feishu` completes, go back to the Feishu developer console:
+
+- **Event Subscriptions** → enable **Long Connection** mode
+- Subscribe to the `im.message.receive_v1` event
+
+**4. Usage**
 
 Send a direct message to the bot, or add it to a group and @mention it.
 
