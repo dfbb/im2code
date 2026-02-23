@@ -80,7 +80,6 @@ type IdleDetector struct {
 	timeout       time.Duration
 	maxLines      int
 	promptMatcher *PromptMatcher
-	ansiDetector  *ANSIActivityDetector
 	lastContent   string
 	onIdle        func(content string)
 }
@@ -92,7 +91,6 @@ func NewIdleDetector(bridge *Bridge, session string, timeout time.Duration, maxL
 		timeout:       timeout,
 		maxLines:      maxLines,
 		promptMatcher: promptMatcher,
-		ansiDetector:  NewANSIActivityDetector(),
 		onIdle:        onIdle,
 	}
 }
@@ -113,8 +111,14 @@ func (d *IdleDetector) Run(ctx context.Context) {
 	defer periodicTicker.Stop()
 
 	var lastChange time.Time
-	var triggered bool
 	var lastPushed string
+	var lastFired time.Time // cooldown: prevents rapid re-triggers on minor content changes
+
+	push := func(content string) {
+		lastFired = time.Now()
+		lastPushed = content
+		d.onIdle(content)
+	}
 
 	for {
 		select {
@@ -128,8 +132,7 @@ func (d *IdleDetector) Run(ctx context.Context) {
 				continue
 			}
 			if content != lastPushed {
-				lastPushed = content
-				d.onIdle(content)
+				push(content)
 			}
 
 		case <-pollTicker.C:
@@ -138,31 +141,26 @@ func (d *IdleDetector) Run(ctx context.Context) {
 				continue
 			}
 
-			d.ansiDetector.Feed(content)
-
 			if content != d.lastContent {
 				d.lastContent = content
 				lastChange = time.Now()
-				triggered = false
 				continue
 			}
 
-			if triggered || lastChange.IsZero() {
+			// Content is stable. Skip if nothing changed since last push,
+			// or if we are still within the cooldown window after the last push.
+			if content == lastPushed || lastChange.IsZero() {
+				continue
+			}
+			if !lastFired.IsZero() && time.Since(lastFired) < d.timeout {
 				continue
 			}
 
 			idle := time.Since(lastChange) > d.timeout
-			animStopped := !d.ansiDetector.IsAnimating()
 			promptFound := d.promptMatcher.Match(content)
 
-			if idle || ((promptFound || animStopped) && !d.ansiDetector.IsAnimating()) {
-				triggered = true
-				// Update lastPushed so the periodic ticker doesn't re-send
-				// the same content 10 s later.
-				if content != lastPushed {
-					lastPushed = content
-					d.onIdle(content)
-				}
+			if idle || promptFound {
+				push(content)
 			}
 		}
 	}
