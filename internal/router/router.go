@@ -1,7 +1,6 @@
 package router
 
 import (
-	"context"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -182,65 +181,32 @@ func (r *Router) Handle(msg channel.InboundMessage) {
 	}
 }
 
-// snapAfterCommand polls the tmux pane until it settles after a command was
-// sent, then pushes one snapshot back to the originating chat.
+// snapAfterCommand waits 500ms then captures the pane once and sends the
+// result back to the originating chat.
 func (r *Router) snapAfterCommand(msg channel.InboundMessage, session string) {
 	if r.bridge == nil {
 		return
-	}
-	minInterval := r.watchMin
-	if minInterval <= 0 {
-		minInterval = 5 * time.Second
 	}
 	maxLines := r.maxLines
 	if maxLines <= 0 {
 		maxLines = 50
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
+	time.Sleep(500 * time.Millisecond)
 
-	var lastContent string
-	var lastChange time.Time
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-time.After(100 * time.Millisecond):
-		}
-
-		content, err := r.bridge.Capture(session, maxLines)
-		if err != nil {
-			continue
-		}
-
-		if content != lastContent {
-			lastContent = content
-			lastChange = time.Now()
-			continue
-		}
-
-		if lastChange.IsZero() {
-			continue
-		}
-
-		promptFound := r.promptMatcher != nil && r.promptMatcher.Match(content)
-		stable := time.Since(lastChange) > minInterval
-
-		if promptFound || stable {
-			out := channel.OutboundMessage{
-				Channel: msg.Channel,
-				ChatID:  msg.ChatID,
-				Text:    "```\n" + content + "\n```",
-			}
-			select {
-			case r.outbound <- out:
-			default:
-				slog.Warn("router: outbound full, dropping post-command snap", "chatID", msg.ChatID)
-			}
-			return
-		}
+	content, err := r.bridge.Capture(session, maxLines)
+	if err != nil {
+		return
+	}
+	out := channel.OutboundMessage{
+		Channel: msg.Channel,
+		ChatID:  msg.ChatID,
+		Text:    "```\n" + content + "\n```",
+	}
+	select {
+	case r.outbound <- out:
+	default:
+		slog.Warn("router: outbound full, dropping post-command snap", "chatID", msg.ChatID)
 	}
 }
 
