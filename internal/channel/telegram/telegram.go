@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
@@ -58,17 +59,25 @@ func (c *Channel) Start(ctx context.Context) error {
 
 func (c *Channel) handleUpdate(update tgbotapi.Update) {
 	msg := update.Message
+	if msg.Text == "" {
+		return // skip non-text messages (photos, stickers, voice, etc.)
+	}
 	senderID := fmt.Sprintf("%d", msg.From.ID)
 
 	if len(c.allowFrom) > 0 && !c.allowFrom[senderID] && !c.allowFrom[msg.From.UserName] {
 		return
 	}
 
-	c.inbound <- channel.InboundMessage{
+	inMsg := channel.InboundMessage{
 		Channel:  "telegram",
 		ChatID:   fmt.Sprintf("%d", msg.Chat.ID),
 		SenderID: senderID,
 		Text:     msg.Text,
+	}
+	select {
+	case c.inbound <- inMsg:
+	default:
+		slog.Warn("telegram: inbound queue full, dropping message", "sender", senderID)
 	}
 }
 
@@ -83,11 +92,15 @@ func (c *Channel) Send(msg channel.OutboundMessage) error {
 	if c.bot == nil {
 		return fmt.Errorf("telegram: not connected")
 	}
+	chatID, err := strconv.ParseInt(msg.ChatID, 10, 64)
+	if err != nil {
+		return fmt.Errorf("telegram: invalid chat ID %q: %w", msg.ChatID, err)
+	}
 	for _, chunk := range splitMessage(msg.Text, 4000) {
-		m := tgbotapi.NewMessageToChannel(msg.ChatID, chunk)
+		m := tgbotapi.NewMessage(chatID, chunk)
 		m.ParseMode = "Markdown"
 		if _, err := c.bot.Send(m); err != nil {
-			// Retry without markdown formatting if parse error
+			// Retry without markdown on parse error
 			m.ParseMode = ""
 			if _, err2 := c.bot.Send(m); err2 != nil {
 				return err2
@@ -114,7 +127,7 @@ func splitMessage(text string, maxLen int) []string {
 	lines := strings.Split(text, "\n")
 	var cur strings.Builder
 	for _, line := range lines {
-		if cur.Len()+len(line)+1 > maxLen {
+		if cur.Len() > 0 && cur.Len()+len(line)+1 > maxLen {
 			chunks = append(chunks, cur.String())
 			cur.Reset()
 		}
