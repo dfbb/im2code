@@ -72,8 +72,12 @@ func (c *Channel) onMessage(ctx context.Context, event *larkim.P2MessageReceiveV
 	}
 
 	// Apply allowFrom filter.
-	if len(c.allowFrom) > 0 && !c.allowFrom[senderID] {
-		return nil
+	preAuthorized := false
+	if len(c.allowFrom) > 0 {
+		if !c.allowFrom[senderID] {
+			return nil
+		}
+		preAuthorized = true
 	}
 
 	// Extract chat ID.
@@ -96,10 +100,11 @@ func (c *Channel) onMessage(ctx context.Context, event *larkim.P2MessageReceiveV
 	}
 
 	msg := channel.InboundMessage{
-		Channel:  "feishu",
-		ChatID:   chatID,
-		SenderID: senderID,
-		Text:     text,
+		Channel:       "feishu",
+		ChatID:        chatID,
+		SenderID:      senderID,
+		Text:          text,
+		PreAuthorized: preAuthorized,
 	}
 
 	select {

@@ -70,14 +70,19 @@ func (c *Channel) handleInner(event slackevents.EventsAPIInnerEvent) {
 		if ev.BotID != "" || ev.SubType != "" {
 			return
 		}
-		if len(c.allowFrom) > 0 && !c.allowFrom[ev.User] {
-			return
+		preAuthorized := false
+		if len(c.allowFrom) > 0 {
+			if !c.allowFrom[ev.User] {
+				return
+			}
+			preAuthorized = true
 		}
 		inMsg := channel.InboundMessage{
-			Channel:  "slack",
-			ChatID:   ev.Channel,
-			SenderID: ev.User,
-			Text:     ev.Text,
+			Channel:       "slack",
+			ChatID:        ev.Channel,
+			SenderID:      ev.User,
+			Text:          ev.Text,
+			PreAuthorized: preAuthorized,
 		}
 		select {
 		case c.inbound <- inMsg:

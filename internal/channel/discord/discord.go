@@ -178,15 +178,20 @@ func (c *Channel) handleMessage(d json.RawMessage) {
 	if msg.Author.Bot || msg.Author.ID == c.botID {
 		return
 	}
-	if len(c.allowFrom) > 0 && !c.allowFrom[msg.Author.ID] {
-		return
+	preAuthorized := false
+	if len(c.allowFrom) > 0 {
+		if !c.allowFrom[msg.Author.ID] {
+			return
+		}
+		preAuthorized = true
 	}
 
 	inMsg := channel.InboundMessage{
-		Channel:  "discord",
-		ChatID:   msg.ChannelID,
-		SenderID: msg.Author.ID,
-		Text:     msg.Content,
+		Channel:       "discord",
+		ChatID:        msg.ChannelID,
+		SenderID:      msg.Author.ID,
+		Text:          msg.Content,
+		PreAuthorized: preAuthorized,
 	}
 	select {
 	case c.inbound <- inMsg:

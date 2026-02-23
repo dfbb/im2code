@@ -106,20 +106,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 	}
 
 	if enabled("telegram") && cfg.Channels.Telegram.Token != "" {
-		cfgFile := configPath()
-		onFirstUser := func(senderID string) {
-			err := updateConfig(cfgFile, func(raw map[string]any) {
-				ch := getOrCreateMap(getOrCreateMap(raw, "channels"), "telegram")
-				existing, _ := ch["allow_from"].([]any)
-				ch["allow_from"] = append(existing, senderID)
-			})
-			if err != nil {
-				slog.Error("telegram: failed to persist first user to config", "err", err)
-			} else {
-				slog.Info("telegram: first user saved to config", "senderID", senderID, "config", cfgFile)
-			}
-		}
-		mgr.Register(telegram.New(cfg.Channels.Telegram.Token, cfg.Channels.Telegram.AllowFrom, onFirstUser, inbound))
+		mgr.Register(telegram.New(cfg.Channels.Telegram.Token, cfg.Channels.Telegram.AllowFrom, inbound))
 	}
 	if enabled("discord") && cfg.Channels.Discord.Token != "" {
 		mgr.Register(discord.New(cfg.Channels.Discord.Token, cfg.Channels.Discord.AllowFrom, inbound))
@@ -130,20 +117,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 	// WhatsApp has no token-based credential: its first-run flow presents a QR
 	// code on stderr for pairing. Always include it when the channel is enabled.
 	if enabled("whatsapp") {
-		cfgFile := configPath()
-		onFirstWAUser := func(senderID string) {
-			err := updateConfig(cfgFile, func(raw map[string]any) {
-				ch := getOrCreateMap(getOrCreateMap(raw, "channels"), "whatsapp")
-				existing, _ := ch["allow_from"].([]any)
-				ch["allow_from"] = append(existing, senderID)
-			})
-			if err != nil {
-				slog.Error("whatsapp: failed to persist first user to config", "err", err)
-			} else {
-				slog.Info("whatsapp: first user saved to config", "senderID", senderID, "config", cfgFile)
-			}
-		}
-		mgr.Register(whatsapp.New(cfg.Channels.WhatsApp.SessionDir, cfg.Channels.WhatsApp.AllowFrom, onFirstWAUser, inbound))
+		mgr.Register(whatsapp.New(cfg.Channels.WhatsApp.SessionDir, cfg.Channels.WhatsApp.AllowFrom, inbound))
 	}
 	if enabled("feishu") && cfg.Channels.Feishu.AppID != "" {
 		mgr.Register(feishu.New(cfg.Channels.Feishu.AppID, cfg.Channels.Feishu.AppSecret, nil, inbound))
@@ -155,7 +129,21 @@ func runStart(cmd *cobra.Command, args []string) error {
 		mgr.Register(qq.New(cfg.Channels.QQ.AppID, cfg.Channels.QQ.Secret, cfg.Channels.QQ.AllowFrom, inbound))
 	}
 
-	rtr := router.New(prefix, subs, bridge, outbound)
+	cfgFile := configPath()
+	onActivate := func(ch, senderID string) {
+		err := updateConfig(cfgFile, func(raw map[string]any) {
+			chanMap := getOrCreateMap(getOrCreateMap(raw, "channels"), ch)
+			existing, _ := chanMap["allow_from"].([]any)
+			chanMap["allow_from"] = append(existing, senderID)
+		})
+		if err != nil {
+			slog.Error("failed to persist activated user to config", "channel", ch, "err", err)
+		} else {
+			slog.Info("activated user saved to config", "channel", ch, "senderID", senderID)
+		}
+	}
+
+	rtr := router.New(prefix, subs, bridge, outbound, onActivate)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

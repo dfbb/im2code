@@ -14,11 +14,12 @@ type Channel interface {
 }
 
 type InboundMessage struct {
-	Channel  string
-	ChatID   string
-	SenderID string
-	Text     string
-	Media    []string
+	Channel       string
+	ChatID        string
+	SenderID      string
+	Text          string
+	Media         []string
+	PreAuthorized bool // true when the adapter's static allowFrom list matched
 }
 
 type OutboundMessage struct {

@@ -23,21 +23,26 @@ const helpText = `Available commands:
 
 // Router dispatches inbound IM messages: prefix-commands → bridge handlers, others → tmux.
 type Router struct {
-	prefix   string
-	subs     *state.Subscriptions
-	bridge   *tmux.Bridge
-	outbound chan<- channel.OutboundMessage
-	watching map[string]bool
-	mu       sync.RWMutex
+	prefix     string
+	subs       *state.Subscriptions
+	bridge     *tmux.Bridge
+	outbound   chan<- channel.OutboundMessage
+	onActivate func(ch, senderID string) // called when a channel is first activated
+	watching   map[string]bool
+	mu         sync.RWMutex
+	activated  map[string]string // channel name → locked senderID
+	activeMu   sync.Mutex
 }
 
-func New(prefix string, subs *state.Subscriptions, bridge *tmux.Bridge, outbound chan<- channel.OutboundMessage) *Router {
+func New(prefix string, subs *state.Subscriptions, bridge *tmux.Bridge, outbound chan<- channel.OutboundMessage, onActivate func(ch, senderID string)) *Router {
 	return &Router{
-		prefix:   prefix,
-		subs:     subs,
-		bridge:   bridge,
-		outbound: outbound,
-		watching: make(map[string]bool),
+		prefix:     prefix,
+		subs:       subs,
+		bridge:     bridge,
+		outbound:   outbound,
+		onActivate: onActivate,
+		watching:   make(map[string]bool),
+		activated:  make(map[string]string),
 	}
 }
 
@@ -60,6 +65,37 @@ func chatKey(msg channel.InboundMessage) string {
 
 // Handle dispatches a message: bridge command or tmux forward.
 func (r *Router) Handle(msg channel.InboundMessage) {
+	// Gate: channels without a pre-configured allowFrom require the sender to
+	// activate with "{prefix}im2code" before any other interaction is accepted.
+	if !msg.PreAuthorized {
+		activationCmd := r.prefix + "im2code"
+
+		r.activeMu.Lock()
+		lockedSender := r.activated[msg.Channel]
+		r.activeMu.Unlock()
+
+		if lockedSender == "" {
+			// Channel not yet activated.
+			if msg.Text == activationCmd {
+				r.activeMu.Lock()
+				r.activated[msg.Channel] = msg.SenderID
+				r.activeMu.Unlock()
+				slog.Info("channel activated", "channel", msg.Channel, "senderID", msg.SenderID)
+				if r.onActivate != nil {
+					go r.onActivate(msg.Channel, msg.SenderID)
+				}
+				r.reply(msg, fmt.Sprintf("Activated. Send %shelp to see available commands.", r.prefix))
+			}
+			// Any other message from anyone: ignore silently.
+			return
+		}
+
+		if lockedSender != msg.SenderID {
+			// Wrong sender — ignore silently.
+			return
+		}
+	}
+
 	if strings.HasPrefix(msg.Text, r.prefix) {
 		r.handleCommand(msg)
 		return

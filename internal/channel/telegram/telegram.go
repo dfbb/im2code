@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"strconv"
 	"strings"
-	"sync"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/dfbb/im2code/internal/channel"
@@ -14,30 +13,18 @@ import (
 
 // Channel is the Telegram IM adapter. Uses HTTP long polling.
 type Channel struct {
-	token       string
-	allowFrom   map[string]bool
-	bot         *tgbotapi.BotAPI
-	inbound     chan<- channel.InboundMessage
-	onFirstUser func(string) // called once with the first sender ID when allowFrom is empty
-
-	mu       sync.Mutex
-	lockedID string // set after the first message when allowFrom is empty
+	token     string
+	allowFrom map[string]bool
+	bot       *tgbotapi.BotAPI
+	inbound   chan<- channel.InboundMessage
 }
 
-// New creates a Telegram channel adapter.
-// When allowFrom is empty, the first sender to message the bot is automatically
-// locked in: their ID is stored in lockedID and onFirstUser is called so the
-// caller can persist it (e.g. write it to the config file).
-func New(token string, allowFrom []string, onFirstUser func(string), inbound chan<- channel.InboundMessage) *Channel {
+func New(token string, allowFrom []string, inbound chan<- channel.InboundMessage) *Channel {
 	allow := make(map[string]bool)
 	for _, id := range allowFrom {
 		allow[id] = true
 	}
-	// If an explicit list is already set, auto-lock is not needed.
-	if len(allow) > 0 {
-		onFirstUser = nil
-	}
-	return &Channel{token: token, allowFrom: allow, onFirstUser: onFirstUser, inbound: inbound}
+	return &Channel{token: token, allowFrom: allow, inbound: inbound}
 }
 
 func (c *Channel) Name() string { return "telegram" }
@@ -73,38 +60,24 @@ func (c *Channel) Start(ctx context.Context) error {
 func (c *Channel) handleUpdate(update tgbotapi.Update) {
 	msg := update.Message
 	if msg.Text == "" {
-		return // skip non-text messages (photos, stickers, voice, etc.)
+		return // skip non-text messages
 	}
 	senderID := fmt.Sprintf("%d", msg.From.ID)
 
+	preAuthorized := false
 	if len(c.allowFrom) > 0 {
-		// Static allow list.
 		if !c.allowFrom[senderID] && !c.allowFrom[msg.From.UserName] {
 			return
 		}
-	} else {
-		// Auto-lock: accept the first sender, reject everyone else.
-		c.mu.Lock()
-		if c.lockedID == "" {
-			c.lockedID = senderID
-			slog.Info("telegram: locked to first user", "senderID", senderID)
-			if c.onFirstUser != nil {
-				fn := c.onFirstUser
-				go fn(senderID) // run in goroutine so it doesn't block the update loop
-			}
-		} else if c.lockedID != senderID {
-			c.mu.Unlock()
-			slog.Warn("telegram: ignoring message from non-locked user", "senderID", senderID, "lockedID", c.lockedID)
-			return
-		}
-		c.mu.Unlock()
+		preAuthorized = true
 	}
 
 	inMsg := channel.InboundMessage{
-		Channel:  "telegram",
-		ChatID:   fmt.Sprintf("%d", msg.Chat.ID),
-		SenderID: senderID,
-		Text:     msg.Text,
+		Channel:       "telegram",
+		ChatID:        fmt.Sprintf("%d", msg.Chat.ID),
+		SenderID:      senderID,
+		Text:          msg.Text,
+		PreAuthorized: preAuthorized,
 	}
 	select {
 	case c.inbound <- inMsg:

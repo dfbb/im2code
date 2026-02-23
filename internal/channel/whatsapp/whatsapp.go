@@ -8,8 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"sync"
-
 	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/proto/waE2E"
 	"go.mau.fi/whatsmeow/store/sqlstore"
@@ -24,17 +22,13 @@ import (
 )
 
 type Channel struct {
-	sessionDir  string
-	allowFrom   map[string]bool
-	onFirstUser func(string)
-	inbound     chan<- channel.InboundMessage
-	client      *whatsmeow.Client
-
-	mu       sync.Mutex
-	lockedID string
+	sessionDir string
+	allowFrom  map[string]bool
+	inbound    chan<- channel.InboundMessage
+	client     *whatsmeow.Client
 }
 
-func New(sessionDir string, allowFrom []string, onFirstUser func(string), inbound chan<- channel.InboundMessage) *Channel {
+func New(sessionDir string, allowFrom []string, inbound chan<- channel.InboundMessage) *Channel {
 	if sessionDir == "" {
 		home, _ := os.UserHomeDir()
 		sessionDir = home + "/.im2code/whatsapp"
@@ -43,10 +37,7 @@ func New(sessionDir string, allowFrom []string, onFirstUser func(string), inboun
 	for _, id := range allowFrom {
 		allow[id] = true
 	}
-	if len(allow) > 0 {
-		onFirstUser = nil // static list set; auto-lock not needed
-	}
-	return &Channel{sessionDir: sessionDir, allowFrom: allow, onFirstUser: onFirstUser, inbound: inbound}
+	return &Channel{sessionDir: sessionDir, allowFrom: allow, inbound: inbound}
 }
 
 func (c *Channel) Name() string { return "whatsapp" }
@@ -115,8 +106,7 @@ func (c *Channel) eventHandler(evt interface{}) {
 			return
 		}
 
-		// Extract text before any sender filtering so that non-text events
-		// (receipts, stickers, system messages) cannot trigger auto-lock.
+		// Skip non-text events (receipts, stickers, system messages).
 		text := ""
 		if v.Message.GetConversation() != "" {
 			text = v.Message.GetConversation()
@@ -131,34 +121,20 @@ func (c *Channel) eventHandler(evt interface{}) {
 		// so the same person is recognised across all their devices.
 		senderID := v.Info.Sender.ToNonAD().String()
 
+		preAuthorized := false
 		if len(c.allowFrom) > 0 {
-			// Static allow list.
 			if !c.allowFrom[senderID] {
 				return
 			}
-		} else {
-			// Auto-lock: accept the first text-message sender, reject everyone else.
-			c.mu.Lock()
-			if c.lockedID == "" {
-				c.lockedID = senderID
-				slog.Info("whatsapp: locked to first user", "senderID", senderID)
-				if c.onFirstUser != nil {
-					fn := c.onFirstUser
-					go fn(senderID)
-				}
-			} else if c.lockedID != senderID {
-				c.mu.Unlock()
-				slog.Warn("whatsapp: ignoring message from non-locked user", "senderID", senderID, "lockedID", c.lockedID)
-				return
-			}
-			c.mu.Unlock()
+			preAuthorized = true
 		}
 
 		msg := channel.InboundMessage{
-			Channel:  "whatsapp",
-			ChatID:   v.Info.Chat.String(),
-			SenderID: senderID,
-			Text:     text,
+			Channel:       "whatsapp",
+			ChatID:        v.Info.Chat.String(),
+			SenderID:      senderID,
+			Text:          text,
+			PreAuthorized: preAuthorized,
 		}
 		select {
 		case c.inbound <- msg:

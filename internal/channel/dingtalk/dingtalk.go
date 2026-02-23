@@ -68,15 +68,20 @@ func (c *Channel) onMessage(ctx context.Context, data *chatbot.BotCallbackDataMo
 	}
 
 	// Apply allowFrom filter.
-	if len(c.allowFrom) > 0 && !c.allowFrom[senderID] {
-		return nil, nil
+	preAuthorized := false
+	if len(c.allowFrom) > 0 {
+		if !c.allowFrom[senderID] {
+			return nil, nil
+		}
+		preAuthorized = true
 	}
 
 	msg := channel.InboundMessage{
-		Channel:  "dingtalk",
-		ChatID:   chatID,
-		SenderID: senderID,
-		Text:     text,
+		Channel:       "dingtalk",
+		ChatID:        chatID,
+		SenderID:      senderID,
+		Text:          text,
+		PreAuthorized: preAuthorized,
 	}
 
 	select {

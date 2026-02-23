@@ -65,9 +65,19 @@ Use a different command prefix (default `#`):
 im2code start --prefix "!"
 ```
 
-### 3. Bind a session from your IM app
+### 3. Activate the bot
 
-Once the daemon is running, send these commands in any configured chat:
+Once the daemon is running, send the following from your IM app to claim ownership of the bot:
+
+```
+#im2code
+```
+
+The bot replies "Activated." and locks to your sender ID, which is automatically saved to `~/.im2code/config.yaml`. All messages from other senders are silently ignored.
+
+### 4. Bind a session from your IM app
+
+Once activated, send these commands in any configured chat:
 
 ```
 #list              — list tmux sessions
@@ -78,7 +88,7 @@ Once the daemon is running, send these commands in any configured chat:
 
 After binding, every plain message you send is forwarded to the terminal via `tmux send-keys`.
 
-### 4. View terminal output
+### 5. View terminal output
 
 ```
 #snap              — capture the current pane (last 50 lines)
@@ -88,7 +98,7 @@ After binding, every plain message you send is forwarded to the terminal via `tm
 
 With `#watch on`, output is sent back to the chat each time a shell prompt is detected (i.e., the running command has finished).
 
-### 5. Send control keys
+### 6. Send control keys
 
 ```
 #key ctrl-c        — interrupt (SIGINT)
@@ -104,6 +114,9 @@ Both `ctrl-x` and `ctrl+x` are accepted as separators.
 ### Typical workflow
 
 ```
+You:  #im2code
+Bot:  Activated. Send #help to see available commands.
+
 You:  #list
 Bot:  Sessions:
         dev
@@ -142,15 +155,13 @@ Open [@BotFather](https://t.me/BotFather) in Telegram, send `/newbot`, and follo
 im2code login telegram
 ```
 
-**3. Start the daemon and send a message**
+**3. Start the daemon and activate**
 
 ```bash
 im2code start
 ```
 
-Send any message to the bot. The first sender's user ID is automatically saved to `allow_from` in `~/.im2code/config.yaml`, and all subsequent messages from other users are ignored. No manual configuration needed.
-
-To allow additional users, add their IDs to `allow_from` in the config file manually.
+Send `#im2code` to the bot. Your user ID is automatically saved to `allow_from` in `~/.im2code/config.yaml` and the bot locks to you. All subsequent messages from other users are silently ignored.
 
 ---
 
@@ -170,9 +181,9 @@ To allow additional users, add their IDs to `allow_from` in the config file manu
 im2code login discord
 ```
 
-**3. Restrict channels**
+**3. Activate**
 
-Set `allow_from` to a list of channel IDs (right-click a channel → Copy ID; requires Developer Mode to be enabled).
+Send `#im2code` in the channel where you want to use the bot. The bot locks to that channel and sender. To pre-restrict to specific channels, set `allow_from` to a list of channel IDs (right-click a channel → Copy ID; requires Developer Mode).
 
 ---
 
@@ -199,9 +210,9 @@ im2code login slack
 # App Token (xapp-...):
 ```
 
-**4. Restrict channels**
+**4. Activate**
 
-Set `allow_from` to a list of channel or user IDs.
+Send `#im2code` in the channel or DM where you want to use the bot. The bot locks to that sender. To pre-restrict to specific channels or users, set `allow_from` to a list of channel or user IDs.
 
 ---
 
@@ -222,6 +233,10 @@ On first launch an ASCII QR code is printed to the terminal. Scan it with your p
 **2. Persistent session**
 
 Pairing data is stored in `~/.im2code/whatsapp/` (configurable). Subsequent restarts reconnect automatically without re-scanning.
+
+**3. Activate**
+
+Send `#im2code` to the bot's WhatsApp number. The bot locks to your number and saves it to `allow_from`.
 
 ---
 
@@ -251,9 +266,9 @@ After `im2code login feishu` completes, go back to the Feishu developer console:
 - **Event Subscriptions** → enable **Long Connection** mode
 - Subscribe to the `im.message.receive_v1` event
 
-**4. Usage**
+**4. Activate**
 
-Send a direct message to the bot, or add it to a group and @mention it.
+Send `#im2code` as a direct message to the bot. The bot locks to your open_id and saves it to `allow_from`.
 
 ---
 
@@ -274,9 +289,9 @@ im2code login dingtalk
 # Client Secret:
 ```
 
-**3. Usage**
+**3. Activate**
 
-Send a direct message to the bot, or @mention it in a group.
+Send `#im2code` as a direct message or @mention in a group. The bot locks to your sender ID and saves it to `allow_from`.
 
 ---
 
@@ -300,9 +315,9 @@ im2code login qq
 # Secret:
 ```
 
-**3. User identifiers**
+**3. Activate**
 
-QQ Bot identifies users by `openid`, not QQ number. The openid is printed in the logs when a user first messages the bot. Add openids to `allow_from` to restrict access.
+Send `#im2code` as a private (C2C) message to the bot. The bot locks to your openid and saves it to `allow_from`. Note: QQ Bot uses `openid`, not your QQ number — the openid is shown in the daemon logs on first contact.
 
 ---
 
@@ -381,6 +396,7 @@ im2code version             Print version
 ### In-chat bridge commands (default prefix `#`)
 
 ```
+#im2code           activate the bot and lock it to your sender ID (first use)
 #list              list tmux sessions
 #attach <session>  bind this chat to a session
 #detach            remove the binding

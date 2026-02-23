@@ -128,13 +128,17 @@ func (c *Channel) onC2CMessage(_ *dto.WSPayload, data *dto.WSC2CMessageData) err
 		return nil
 	}
 
-	if len(c.allowFrom) > 0 && !c.allowFrom[userID] {
-		slog.Warn("qq: ignoring message from unauthorized user", "userID", userID)
-		return nil
+	preAuthorized := false
+	if len(c.allowFrom) > 0 {
+		if !c.allowFrom[userID] {
+			slog.Warn("qq: ignoring message from unauthorized user", "userID", userID)
+			return nil
+		}
+		preAuthorized = true
 	}
 
 	select {
-	case c.inbound <- channel.InboundMessage{Channel: "qq", ChatID: userID, Text: content}:
+	case c.inbound <- channel.InboundMessage{Channel: "qq", ChatID: userID, SenderID: userID, Text: content, PreAuthorized: preAuthorized}:
 	default:
 		slog.Warn("qq: inbound full, dropping message", "userID", userID)
 	}
