@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"strings"
 	"time"
 
@@ -154,21 +155,21 @@ func (c *Channel) Send(msg channel.OutboundMessage) error {
 
 // CheckToken verifies the app credentials by fetching a tenant access token.
 func CheckToken(appID, appSecret string) (string, error) {
-	payload := fmt.Sprintf(`{"app_id":%q,"app_secret":%q}`, appID, appSecret)
-	resp, err := lark.NewClient(appID, appSecret).Post(
-		context.Background(),
-		"/open-apis/auth/v3/tenant_access_token/internal",
-		strings.NewReader(payload),
-		larkcore.AccessTokenTypeNone,
+	body := fmt.Sprintf(`{"app_id":%q,"app_secret":%q}`, appID, appSecret)
+	resp, err := http.Post(
+		"https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal",
+		"application/json; charset=utf-8",
+		strings.NewReader(body),
 	)
 	if err != nil {
 		return "", fmt.Errorf("feishu: %w", err)
 	}
+	defer resp.Body.Close()
 	var r struct {
 		Code int    `json:"code"`
 		Msg  string `json:"msg"`
 	}
-	if err := json.Unmarshal(resp.RawBody, &r); err != nil {
+	if err := json.NewDecoder(resp.Body).Decode(&r); err != nil {
 		return "", fmt.Errorf("feishu: decode response: %w", err)
 	}
 	if r.Code != 0 {
