@@ -54,119 +54,6 @@ im2code version
 
 ---
 
-## tmux Integration
-
-### 1. Start a named tmux session
-
-im2code works with existing tmux sessions — it does not create them. Use meaningful names:
-
-```bash
-tmux new-session -s dev
-tmux new-session -s prod
-```
-
-### 2. Start the daemon
-
-```bash
-im2code start
-```
-
-The daemon reads `~/.im2code/config.yaml` and enables every channel that has credentials configured.
-
-Enable specific channels only:
-
-```bash
-im2code start --channels telegram,slack
-```
-
-Use a different command prefix (default `#`):
-
-```bash
-im2code start --prefix "!"
-```
-
-### 3. Activate the bot
-
-Once the daemon is running, send the following from your IM app to claim ownership of the bot:
-
-```
-#im2code
-```
-
-The bot replies "Activated." and locks to your sender ID, which is automatically saved to `~/.im2code/config.yaml`. All messages from other senders are silently ignored.
-
-### 4. Bind a session from your IM app
-
-Once activated, send these commands in any configured chat:
-
-```
-#list              — list tmux sessions
-#attach dev        — bind this chat to the "dev" session
-#detach            — remove the binding
-#status            — show current binding and watch state
-```
-
-After binding, every plain message you send is forwarded to the terminal via `tmux send-keys`.
-
-### 5. View terminal output
-
-```
-#snap              — capture the current pane (last 50 lines)
-#watch on          — push output automatically when the terminal goes idle
-#watch off         — stop automatic pushes
-#setivl min,max    — adjust watch intervals live (e.g. #setivl 5s,20s)
-```
-
-Every plain-text command you send is echoed back as a terminal snapshot ~500ms after it runs, regardless of watch mode.
-
-With `#watch on`, output is pushed automatically:
-- **Immediately** when a shell prompt is detected (command finished)
-- **Periodically** (every `watchtime_max`) if the terminal changes but no prompt appears
-- Suppressed if nothing has changed since the last push
-
-### 6. Send control keys
-
-```
-#key ctrl-c        — interrupt (SIGINT)
-#key ctrl-d        — EOF
-#key ctrl-z        — suspend
-#key Enter         — carriage return
-#key Tab           — tab / autocomplete
-#key esc           — Escape
-```
-
-Both `ctrl-x` and `ctrl+x` are accepted as separators.
-
-### Typical workflow
-
-```
-You:  #im2code
-Bot:  Activated. Send #help to see available commands.
-
-You:  #list
-Bot:  Sessions:
-        dev
-        prod
-
-You:  #attach dev
-Bot:  Attached to session: dev
-
-You:  ls -la
-      (terminal runs ls -la)
-
-You:  #watch on
-Bot:  Watch mode enabled.
-
-You:  npm test
-      (terminal runs tests; when done, output is pushed back)
-Bot:  ```
-      PASS src/app.test.ts
-      Tests: 12 passed
-      ```
-```
-
----
-
 ## IM Platform Setup
 
 ### Telegram
@@ -361,6 +248,119 @@ im2code login qq
 **3. Activate**
 
 Send `#im2code` as a private (C2C) message to the bot. The bot locks to your openid and saves it to `allow_from`. Note: QQ Bot uses `openid`, not your QQ number — the openid is shown in the daemon logs on first contact.
+
+---
+
+## tmux Integration
+
+### 1. Start a named tmux session
+
+im2code works with existing tmux sessions — it does not create them. Use meaningful names:
+
+```bash
+tmux new-session -s dev
+tmux new-session -s prod
+```
+
+### 2. Start the daemon
+
+```bash
+im2code start
+```
+
+The daemon reads `~/.im2code/config.yaml` and enables every channel that has credentials configured.
+
+Enable specific channels only:
+
+```bash
+im2code start --channels telegram,slack
+```
+
+Use a different command prefix (default `#`):
+
+```bash
+im2code start --prefix "!"
+```
+
+### 3. Activate the bot
+
+Once the daemon is running, send the following from your IM app to claim ownership of the bot:
+
+```
+#im2code
+```
+
+The bot replies "Activated." and locks to your sender ID, which is automatically saved to `~/.im2code/config.yaml`. All messages from other senders are silently ignored.
+
+### 4. Bind a session from your IM app
+
+Once activated, send these commands in any configured chat:
+
+```
+#list              — list tmux sessions
+#attach dev        — bind this chat to the "dev" session
+#detach            — remove the binding
+#status            — show current binding and watch state
+```
+
+After binding, every plain message you send is forwarded to the terminal via `tmux send-keys`.
+
+### 5. View terminal output
+
+```
+#snap              — capture the current pane (last 50 lines)
+#watch on          — push output automatically when the terminal goes idle
+#watch off         — stop automatic pushes
+#setivl min,max    — adjust watch intervals live (e.g. #setivl 5s,20s)
+```
+
+Every plain-text command you send is echoed back as a terminal snapshot ~500ms after it runs, regardless of watch mode.
+
+With `#watch on`, output is pushed automatically:
+- **Immediately** when a shell prompt is detected (command finished)
+- **Periodically** (every `watchtime_max`) if the terminal changes but no prompt appears
+- Suppressed if nothing has changed since the last push
+
+### 6. Send control keys
+
+```
+#key ctrl-c        — interrupt (SIGINT)
+#key ctrl-d        — EOF
+#key ctrl-z        — suspend
+#key Enter         — carriage return
+#key Tab           — tab / autocomplete
+#key esc           — Escape
+```
+
+Both `ctrl-x` and `ctrl+x` are accepted as separators.
+
+### Typical workflow
+
+```
+You:  #im2code
+Bot:  Activated. Send #help to see available commands.
+
+You:  #list
+Bot:  Sessions:
+        dev
+        prod
+
+You:  #attach dev
+Bot:  Attached to session: dev
+
+You:  ls -la
+      (terminal runs ls -la)
+
+You:  #watch on
+Bot:  Watch mode enabled.
+
+You:  npm test
+      (terminal runs tests; when done, output is pushed back)
+Bot:  ```
+      PASS src/app.test.ts
+      Tests: 12 passed
+      ```
+```
 
 ---
 
