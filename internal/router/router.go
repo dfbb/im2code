@@ -244,6 +244,7 @@ func (r *Router) handleCommand(msg channel.InboundMessage) {
 		}
 		r.subs.Set(key, args[0])
 		r.reply(msg, fmt.Sprintf("Attached to session: %s", args[0]))
+		go r.snapAfterCommand(msg, args[0])
 
 	case "detach":
 		r.subs.Delete(key)
