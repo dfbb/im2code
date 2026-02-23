@@ -56,8 +56,15 @@ func (b *Bridge) Capture(session string, maxLines int) (string, error) {
 }
 
 // SendKeys sends text input followed by Enter to the given tmux session.
+// The text is sent with -l (literal) so that any \n or \r in the message is
+// not misinterpreted by tmux as a key sequence (e.g. \n → M-Enter / Option+Enter
+// on macOS). Trailing CR/LF is stripped because Enter is sent explicitly.
 func (b *Bridge) SendKeys(session, text string) error {
-	return exec.Command("tmux", "send-keys", "-t", session, text, "Enter").Run()
+	text = strings.TrimRight(text, "\r\n")
+	if err := exec.Command("tmux", "send-keys", "-t", session, "-l", text).Run(); err != nil {
+		return err
+	}
+	return exec.Command("tmux", "send-keys", "-t", session, "Enter").Run()
 }
 
 // SendRawKey sends a tmux key (e.g. "C-c", "C-z") to the session without Enter.
