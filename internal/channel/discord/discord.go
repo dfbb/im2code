@@ -34,6 +34,7 @@ type Channel struct {
 	inbound   chan<- channel.InboundMessage
 	mu        sync.Mutex
 	seqMu     sync.Mutex
+	writeMu   sync.Mutex
 	ws        *websocket.Conn
 	seq       int
 	botID     string
@@ -133,12 +134,14 @@ func (c *Channel) identify(conn *websocket.Conn) error {
 		"op": 2,
 		"d": map[string]any{
 			"token":   c.token,
-			"intents": 33280, // GUILD_MESSAGES + MESSAGE_CONTENT + DIRECT_MESSAGES
+			"intents": 37376, // GUILD_MESSAGES (512) + MESSAGE_CONTENT (32768) + DIRECT_MESSAGES (4096)
 			"properties": map[string]string{
 				"os": "linux", "browser": "im2code", "device": "im2code",
 			},
 		},
 	})
+	c.writeMu.Lock()
+	defer c.writeMu.Unlock()
 	return conn.WriteMessage(websocket.TextMessage, data)
 }
 
@@ -154,7 +157,9 @@ func (c *Channel) heartbeat(ctx context.Context, conn *websocket.Conn, interval 
 			seq := c.seq
 			c.seqMu.Unlock()
 			data, _ := json.Marshal(map[string]any{"op": 1, "d": seq})
+			c.writeMu.Lock()
 			conn.WriteMessage(websocket.TextMessage, data)
+			c.writeMu.Unlock()
 		}
 	}
 }
@@ -177,11 +182,16 @@ func (c *Channel) handleMessage(d json.RawMessage) {
 		return
 	}
 
-	c.inbound <- channel.InboundMessage{
+	inMsg := channel.InboundMessage{
 		Channel:  "discord",
 		ChatID:   msg.ChannelID,
 		SenderID: msg.Author.ID,
 		Text:     msg.Content,
+	}
+	select {
+	case c.inbound <- inMsg:
+	default:
+		slog.Warn("discord: inbound queue full, dropping message", "channel", msg.ChannelID)
 	}
 }
 
@@ -195,9 +205,10 @@ func (c *Channel) Stop() error {
 }
 
 func (c *Channel) Send(msg channel.OutboundMessage) error {
-	url := fmt.Sprintf("%s/channels/%s/messages", apiBase, msg.ChatID)
-	for _, chunk := range splitMessage(msg.Text, 2000) {
+	chunks := splitMessage(msg.Text, 2000)
+	for _, chunk := range chunks {
 		body, _ := json.Marshal(map[string]string{"content": chunk})
+		url := fmt.Sprintf("%s/channels/%s/messages", apiBase, msg.ChatID)
 		req, _ := http.NewRequest("POST", url, bytes.NewReader(body))
 		req.Header.Set("Authorization", "Bot "+c.token)
 		req.Header.Set("Content-Type", "application/json")
@@ -207,8 +218,21 @@ func (c *Channel) Send(msg channel.OutboundMessage) error {
 		}
 		resp.Body.Close()
 		if resp.StatusCode == 429 {
-			// Simple rate limit backoff
 			time.Sleep(1 * time.Second)
+			// retry once
+			req2, _ := http.NewRequest("POST", url, bytes.NewReader(body))
+			req2.Header.Set("Authorization", "Bot "+c.token)
+			req2.Header.Set("Content-Type", "application/json")
+			resp2, err := http.DefaultClient.Do(req2)
+			if err != nil {
+				return err
+			}
+			resp2.Body.Close()
+			if resp2.StatusCode < 200 || resp2.StatusCode >= 300 {
+				return fmt.Errorf("discord: send failed with status %d", resp2.StatusCode)
+			}
+		} else if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			return fmt.Errorf("discord: send failed with status %d", resp.StatusCode)
 		}
 	}
 	return nil
@@ -241,7 +265,7 @@ func splitMessage(text string, maxLen int) []string {
 	lines := strings.Split(text, "\n")
 	var cur strings.Builder
 	for _, line := range lines {
-		if cur.Len()+len(line)+1 > maxLen {
+		if cur.Len() > 0 && cur.Len()+len(line)+1 > maxLen {
 			chunks = append(chunks, cur.String())
 			cur.Reset()
 		}
