@@ -102,7 +102,15 @@ func (c *Channel) Start(ctx context.Context) error {
 func (c *Channel) eventHandler(evt interface{}) {
 	switch v := evt.(type) {
 	case *events.Message:
+		slog.Info("whatsapp: raw event",
+			"type", v.Info.Type,
+			"from", v.Info.Sender,
+			"chat", v.Info.Chat,
+			"isFromMe", v.Info.IsFromMe,
+		)
+
 		if v.Info.IsFromMe {
+			slog.Info("whatsapp: skipping (IsFromMe)")
 			return
 		}
 
@@ -113,17 +121,21 @@ func (c *Channel) eventHandler(evt interface{}) {
 		} else if v.Message.GetExtendedTextMessage() != nil {
 			text = v.Message.GetExtendedTextMessage().GetText()
 		}
+		slog.Info("whatsapp: extracted text", "text", text, "len", len(text))
 		if text == "" {
+			slog.Info("whatsapp: skipping (no text)")
 			return
 		}
 
 		// Strip device suffix (number:3@s.whatsapp.net → number@s.whatsapp.net)
 		// so the same person is recognised across all their devices.
 		senderID := v.Info.Sender.ToNonAD().String()
+		slog.Info("whatsapp: senderID", "senderID", senderID, "allowFrom", c.allowFrom)
 
 		preAuthorized := false
 		if len(c.allowFrom) > 0 {
 			if !c.allowFrom[senderID] {
+				slog.Info("whatsapp: skipping (not in allowFrom)")
 				return
 			}
 			preAuthorized = true
@@ -136,6 +148,7 @@ func (c *Channel) eventHandler(evt interface{}) {
 			Text:          text,
 			PreAuthorized: preAuthorized,
 		}
+		slog.Info("whatsapp: sending to inbound", "chatID", msg.ChatID, "preAuthorized", preAuthorized)
 		select {
 		case c.inbound <- msg:
 		default:

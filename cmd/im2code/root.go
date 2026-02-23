@@ -25,4 +25,5 @@ func init() {
 	rootCmd.AddCommand(loginCmd)
 	rootCmd.AddCommand(checkCmd)
 	rootCmd.AddCommand(statusCmd)
+	rootCmd.AddCommand(rebindCmd)
 }
