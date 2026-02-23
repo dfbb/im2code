@@ -214,13 +214,40 @@ func (r *Router) WatchedChats() map[string]string {
 	return result
 }
 
+// keyAliases maps short/common names to the tmux key names expected by send-keys.
+var keyAliases = map[string]string{
+	"esc":       "Escape",
+	"escape":    "Escape",
+	"bs":        "BSpace",
+	"backspace": "BSpace",
+	"del":       "Delete",
+	"delete":    "Delete",
+	"ins":       "Insert",
+	"insert":    "Insert",
+	"pgup":      "PPage",
+	"pageup":    "PPage",
+	"pgdn":      "NPage",
+	"pagedown":  "NPage",
+	"home":      "Home",
+	"end":       "End",
+	"up":        "Up",
+	"down":      "Down",
+	"left":      "Left",
+	"right":     "Right",
+	"space":     "Space",
+}
+
 func toTmuxKey(key string) string {
-	lower := strings.ToLower(key)
-	if strings.HasPrefix(lower, "ctrl-") {
-		return "C-" + strings.ToLower(key[5:])
+	// Normalize separator: ctrl+x and ctrl-x are equivalent.
+	normalized := strings.ReplaceAll(strings.ToLower(key), "+", "-")
+	if strings.HasPrefix(normalized, "ctrl-") {
+		return "C-" + normalized[5:]
 	}
-	if strings.HasPrefix(lower, "alt-") {
-		return "M-" + strings.ToLower(key[4:])
+	if strings.HasPrefix(normalized, "alt-") {
+		return "M-" + normalized[4:]
 	}
-	return key // pass through as-is: Enter, Tab, Escape, etc.
+	if alias, ok := keyAliases[normalized]; ok {
+		return alias
+	}
+	return key // pass through as-is: Enter, Tab, Escape, F1, etc.
 }
