@@ -48,7 +48,7 @@ func (c *Channel) Start(ctx context.Context) error {
 	}
 
 	// Use file DSN with foreign keys enabled (required by sqlstore)
-	dsn := "file:" + c.sessionDir + "/session.db?_foreign_keys=on"
+	dsn := "file:" + c.sessionDir + "/session.db?_pragma=foreign_keys(on)"
 	container, err := sqlstore.New(ctx, "sqlite", dsn, nil)
 	if err != nil {
 		return fmt.Errorf("whatsapp store: %w", err)
