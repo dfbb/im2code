@@ -171,14 +171,9 @@ func (r *Router) Handle(msg channel.InboundMessage) {
 		return
 	}
 
-	// When #watch on is active the idle detector already handles output push.
-	// Otherwise fire a one-shot snap so the user sees the command result.
-	r.mu.RLock()
-	isWatching := r.watching[key]
-	r.mu.RUnlock()
-	if !isWatching {
-		go r.snapAfterCommand(msg, session)
-	}
+	// Always fire a one-shot snap 500ms after the command so the user sees
+	// the result immediately, regardless of watch mode or any config delay.
+	go r.snapAfterCommand(msg, session)
 }
 
 // snapAfterCommand waits 500ms then captures the pane once and sends the
